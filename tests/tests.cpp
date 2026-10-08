@@ -8,6 +8,8 @@
 #include "cronicas/MissionPlanner.hpp"
 #include <limits>
 #include <cmath>
+#include "cronicas/TerminalUI.hpp"
+#include <sstream>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -91,6 +93,16 @@ int main() {
         check(std::abs(c.candidates[0].benefit-(8+2*std::log10(2)))<1e-10,"fórmula benefício");
         check(std::abs(c.candidates[0].cost-(12+5*std::log10(2)))<1e-10,"fórmula custo");
         b.gravity=0; check(estimateCandidates({&b}).excluded.size()==1,"zero excluído"); b.id="terre"; check(estimateCandidates({&b}).excluded.size()==1,"base excluída");
+    }});
+    tests.push_back({"menu integrado e leitura local", [] {
+        BodyCatalog c; c.load(readLocalJson(FIXTURE_PATH),"fixture");
+        struct Fake:HttpClient { HttpResponse get(const std::string&,const std::string&) const override { throw std::runtime_error("rede simulada indisponível"); } } http;
+        SolarApiClient api(http);
+        std::istringstream input("bad\n2\nmars\n3\n1\nEAR\n3\n2\ngravity\n1\n4\n4\n5\n1\nMoon\n5\n2\n1\n6\nterre\nmars\n7\n8\n100\n2\n1\n2\n/arquivo/inexistente\n9\n"); std::ostringstream output;
+        TerminalUI(c,api,input,output).run(); auto text=output.str();
+        check(text.find("Erro:")!=std::string::npos,"entrada inválida"); check(text.find("Mars")!=std::string::npos,"consulta"); check(text.find("Diferença gravidade")!=std::string::npos,"comparação"); check(text.find("Colisões de inserção")!=std::string::npos,"instrumentação"); check(text.find("Benefício total")!=std::string::npos,"planejamento"); check(c.find("mars"),"falha local preserva dados");
+        std::istringstream eof("8\n"); std::ostringstream end; TerminalUI(c,api,eof,end).run(); check(end.str().find("Entrada encerrada")!=std::string::npos,"EOF durante operação");
+        std::istringstream local(std::string("1\n2\n")+FIXTURE_PATH+"\n9\n"); std::ostringstream log; TerminalUI(c,api,local,log).run(); check(c.source().find("JSON local:")==0,"origem explícita");
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }

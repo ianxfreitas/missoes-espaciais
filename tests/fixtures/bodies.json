@@ -1,0 +1,8 @@
+{
+  "bodies": [
+    {"id":"terre","englishName":"Earth","bodyType":"Planet","isPlanet":true,"gravity":9.80665,"meanRadius":6371.0084,"mass":{"massValue":5.97237,"massExponent":24},"semimajorAxis":149598023,"avgTemp":288},
+    {"id":"mars","englishName":"Mars","bodyType":"Planet","isPlanet":true,"gravity":3.71,"meanRadius":3389.5,"mass":{"massValue":6.4171,"massExponent":23},"semimajorAxis":227939200,"avgTemp":210},
+    {"id":"lune","englishName":"Moon","bodyType":"Moon","isPlanet":false,"gravity":1.62,"meanRadius":1737.4,"mass":null,"avgTemp":250},
+    {"id":"unknown","englishName":"Synthetic Unknown","bodyType":"Asteroid","isPlanet":false,"gravity":0,"meanRadius":null,"mass":null}
+  ]
+}
