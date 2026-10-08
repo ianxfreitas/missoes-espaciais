@@ -1,0 +1,59 @@
+# ==========================
+# Arquivos de compilação C++
+# ==========================
+*.o
+*.obj
+*.out
+*.exe
+*.a
+*.so
+
+# ==========================
+# CMake
+# ==========================
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# ==========================
+# Chaves de API e credenciais
+# ==========================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ==========================
+# Arquivos temporários
+# ==========================
+*.tmp
+*.log
+*~
+*.swp
+*.swo
+
+# ==========================
+# Editores
+# ==========================
+.vscode/
+.idea/
+
+# ==========================
+# Sistema operacional
+# ==========================
+.DS_Store
+Thumbs.db
+
+# ==========================
+# Testes
+# ==========================
+Testing/
+coverage/
+*.gcda
+*.gcno
+*.gcov
