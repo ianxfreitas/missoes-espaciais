@@ -1,5 +1,6 @@
 #include "cronicas/CelestialBody.hpp"
 #include "cronicas/SolarApiClient.hpp"
+#include "cronicas/HashTable.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -27,6 +28,14 @@ int main() {
         fake.fail=true; threw=false; try { api.fetch(); } catch(const std::runtime_error&) { threw=true; } check(threw,"rede");
         unsetenv("SOLAR_API_KEY"); threw=false; try { api.fetch(); } catch(const std::runtime_error&) { threw=true; } check(threw,"token ausente");
         if(saved) setenv("SOLAR_API_KEY",saved->c_str(),1);
+    }});
+    tests.push_back({"hash e colisões", [] {
+        HashTable table(16); CelestialBody b; b.id="a"; check(table.insert(b),"inserção"); check(table.find("a"),"busca existente"); check(!table.find("missing"),"busca ausente");
+        b.englishName="updated"; check(!table.insert(b),"duplicata"); check(table.size()==1 && table.collisions()==0,"duplicata não conta"); check(table.find("a")->englishName=="updated","atualização");
+        std::string colliding;
+        for(int i=0;i<1000;++i) { auto key="key"+std::to_string(i); if(HashTable::hashKey(key)%16==HashTable::hashKey("a")%16) { colliding=key; break; } }
+        check(!colliding.empty(),"chave controlada"); b.id=colliding; table.insert(b); check(table.collisions()==1,"colisão exata"); check(table.loadFactor()==2.0/16,"fator de carga");
+        check(HashTable::hashKey("a")==12638187200555641996ULL,"FNV determinístico");
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }
