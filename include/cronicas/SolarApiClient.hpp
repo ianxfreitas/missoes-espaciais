@@ -4,9 +4,10 @@
 namespace cronicas {
 class SolarApiClient {
     const HttpClient& http_;
-public:
-    explicit SolarApiClient(const HttpClient& http): http_(http) {}
+
+   public:
+    explicit SolarApiClient(const HttpClient& http) : http_(http) {}
     ParseResult fetch() const;
 };
 ParseResult readLocalJson(const std::string& path);
-}
+}  // namespace cronicas

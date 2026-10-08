@@ -2,7 +2,10 @@
 #include <optional>
 #include <string>
 namespace cronicas {
-struct Mass { double value; int exponent; };
+struct Mass {
+    double value;
+    int exponent;
+};
 struct CelestialBody {
     std::string id, englishName, bodyType;
     std::optional<bool> isPlanet;
@@ -10,4 +13,4 @@ struct CelestialBody {
     std::optional<Mass> mass;
 };
 std::string displayName(const CelestialBody& body);
-}
+}  // namespace cronicas

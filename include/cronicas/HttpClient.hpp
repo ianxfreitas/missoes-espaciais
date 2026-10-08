@@ -1,14 +1,19 @@
 #pragma once
 #include <string>
 namespace cronicas {
-struct HttpResponse { long status; std::string body; };
+struct HttpResponse {
+    long status;
+    std::string body;
+};
 class HttpClient {
-public:
+   public:
     virtual ~HttpClient() = default;
-    virtual HttpResponse get(const std::string& url, const std::string& token) const = 0;
+    virtual HttpResponse get(const std::string& url,
+                             const std::string& token) const = 0;
 };
 class CurlHttpClient final : public HttpClient {
-public:
-    HttpResponse get(const std::string& url, const std::string& token) const override;
+   public:
+    HttpResponse get(const std::string& url,
+                     const std::string& token) const override;
 };
-}
+}  // namespace cronicas

@@ -16,7 +16,8 @@ HashTable::~HashTable() { clear(); }
 void HashTable::clear() noexcept {
     for (auto& head : buckets_) {
         while (head) {
-            // Guardar next antes de liberar: head deixa de ser válido após delete.
+            // Guardar next antes de liberar: head deixa de ser válido após
+            // delete.
             Node* next = head->next;
             delete head;
             head = next;
@@ -75,13 +76,14 @@ bool HashTable::insert(const CelestialBody& body) {
         throw std::invalid_argument("ID não pode ser vazio");
     }
     if (buckets_.empty()) {
-        buckets_.resize(16, nullptr); // Permite reutilizar uma tabela movida.
+        buckets_.resize(16, nullptr);  // Permite reutilizar uma tabela movida.
     }
     const auto hash = hashKey(body.id);
     auto index = hash % buckets_.size();
     for (Node* node = buckets_[index]; node; node = node->next) {
         if (node->body.id == body.id) {
-            CelestialBody copy = body; // Falha de cópia preserva o corpo anterior.
+            CelestialBody copy =
+                body;  // Falha de cópia preserva o corpo anterior.
             std::swap(node->body, copy);
             return false;
         }
@@ -97,10 +99,10 @@ bool HashTable::insert(const CelestialBody& body) {
         index = hash % buckets_.size();
     }
     if (buckets_[index]) {
-        ++collisions_; // Uma chave nova em balde não vazio: um evento.
+        ++collisions_;  // Uma chave nova em balde não vazio: um evento.
     }
     node->next = buckets_[index];
-    buckets_[index] = node.release(); // A tabela passa a possuir o nó.
+    buckets_[index] = node.release();  // A tabela passa a possuir o nó.
     ++size_;
     return true;
 }
@@ -109,7 +111,8 @@ const CelestialBody* HashTable::find(const std::string& id) const noexcept {
     if (buckets_.empty()) {
         return nullptr;
     }
-    for (Node* node = buckets_[hashKey(id) % buckets_.size()]; node; node = node->next) {
+    for (Node* node = buckets_[hashKey(id) % buckets_.size()]; node;
+         node = node->next) {
         if (node->body.id == id) {
             return &node->body;
         }
@@ -127,4 +130,4 @@ std::vector<const CelestialBody*> HashTable::elements() const {
     }
     return result;
 }
-}
+}  // namespace cronicas
