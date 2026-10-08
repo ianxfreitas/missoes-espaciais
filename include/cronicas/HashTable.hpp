@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 namespace cronicas {
+struct HashStatistics { size_t elements, capacity, collisions, rehashes; double loadFactor; };
 class HashTable {
     struct Node {
         CelestialBody body;
@@ -25,6 +26,7 @@ public:
     bool insert(const CelestialBody& body);
     const CelestialBody* find(const std::string& id) const noexcept;
     std::vector<const CelestialBody*> elements() const;
+    HashStatistics statistics() const noexcept { return {size_,capacity(),collisions_,rehashes_,loadFactor()}; }
     size_t size() const noexcept { return size_; }
     size_t capacity() const noexcept { return buckets_.size(); }
     size_t collisions() const noexcept { return collisions_; }
