@@ -1,6 +1,7 @@
 #include "cronicas/CelestialBody.hpp"
 #include "cronicas/SolarApiClient.hpp"
 #include "cronicas/HashTable.hpp"
+#include "cronicas/BodyCatalog.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -53,6 +54,15 @@ int main() {
         t=std::move(moved); check(t.size()==1004,"atribuição por movimento");
         bool threw=false; try { HashTable invalid(0); } catch(const std::invalid_argument&) { threw=true; } check(threw,"capacidade zero");
         b.id=""; threw=false; try { t.insert(b); } catch(const std::invalid_argument&) { threw=true; } check(threw,"id vazio");
+    }});
+    tests.push_back({"catálogo pesquisa filtros e carga", [] {
+        BodyCatalog c; check(c.list().empty(),"vazio");
+        auto parsed=parseBodies(R"({"bodies":[{"id":"terre","englishName":"Earth","bodyType":"Planet","isPlanet":true,"gravity":9.8},{"id":"lune","englishName":"Moon","bodyType":"Moon","isPlanet":false},{"id":"terre","englishName":"Earth","bodyType":"Planet","isPlanet":true,"gravity":9.80665}]})");
+        auto s=c.load(parsed,"teste"); check(s.inserted==2 && s.updated==1,"duplicatas na carga");
+        check(c.searchName("EAR").size()==1,"pesquisa sem maiúsculas"); check(c.filterType("moon").size()==1,"tipo"); check(c.filterPlanet(true).size()==1,"planeta"); check(c.filterRange("gravity",9,10).size()==1,"intervalo e ausência");
+        bool threw=false; try { c.load(ParseResult{},"inválido"); } catch(const std::runtime_error&) { threw=true; } check(threw && c.find("terre") && c.source()=="teste","carga transacional");
+        for(auto field:{"gravity","bad"}) { threw=false; try { c.filterRange(field,10,9); } catch(const std::invalid_argument&) { threw=true; } check(threw,"intervalo inválido"); }
+        c.load(parsed,"recarga"); check(c.statistics().elements==2,"recarga substitui");
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }
