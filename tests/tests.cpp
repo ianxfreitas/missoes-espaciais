@@ -2,6 +2,9 @@
 #include "cronicas/SolarApiClient.hpp"
 #include "cronicas/HashTable.hpp"
 #include "cronicas/BodyCatalog.hpp"
+#include "cronicas/TrieIndex.hpp"
+#include "cronicas/BTreeIndex.hpp"
+#include <type_traits>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -63,6 +66,10 @@ int main() {
         bool threw=false; try { c.load(ParseResult{},"inválido"); } catch(const std::runtime_error&) { threw=true; } check(threw && c.find("terre") && c.source()=="teste","carga transacional");
         for(auto field:{"gravity","bad"}) { threw=false; try { c.filterRange(field,10,9); } catch(const std::invalid_argument&) { threw=true; } check(threw,"intervalo inválido"); }
         c.load(parsed,"recarga"); check(c.statistics().elements==2,"recarga substitui");
+    }});
+    tests.push_back({"interfaces Parte 2", [] {
+        static_assert(std::is_abstract_v<TrieIndex> && std::is_abstract_v<BTreeIndex>);
+        static_assert(std::has_virtual_destructor_v<TrieIndex> && std::has_virtual_destructor_v<BTreeIndex>);
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }
