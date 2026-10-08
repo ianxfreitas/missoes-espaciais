@@ -303,7 +303,7 @@ Com orçamento 10 e limite 2, a heurística seleciona A, sobra 4 e o benefício 
 
 ## Testes e validação
 
-A suíte verifica modelo, JSON inválido, ausência, zero, tipos incorretos, HTTP simulado, autenticação, falhas de rede, inserção, busca, duplicatas, colisões controladas, fator de carga, rehashing, integridade de 1.004 elementos, transferência de propriedade, pesquisas, filtros, recarga transacional, interfaces abstratas, fórmulas, restrições, desempates, contraexemplo e menu com fluxos locais e EOF.
+A suíte possui 12 grupos internos e verifica modelo, JSON inválido, ausência, zero, tipos incorretos, HTTP simulado, autenticação, falhas de rede, inserção, busca, duplicatas, colisões controladas, fator de carga, rehashing, integridade de 1.004 elementos, transferência de propriedade, pesquisas, filtros, recarga transacional, interfaces abstratas, fórmulas, restrições, desempates, contraexemplo e menu com fluxos locais e EOF.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

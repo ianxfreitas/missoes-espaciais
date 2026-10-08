@@ -54,3 +54,9 @@ São resultados dessa resposta e dessa ordem de carga, não constantes garantida
 Executados `./build/missoes --help` e o modo `--json tests/fixtures/bodies.json`. O fluxo local apresentou quatro corpos, uma colisão e fator de carga 0,25. O plano com orçamento 100 e limite 2 selecionou Mars e Moon: custo 35,121852 e benefício 20,613934. A origem foi identificada como local, sem alegar consumo dinâmico.
 
 `git diff --check` foi executado sem erros. Os arquivos de build e credenciais não são incluídos nos commits. Nenhum push foi realizado.
+
+## Revisão final
+
+O resumo de carga passou a usar a contagem explícita de rejeições do parser, sem interpretar o texto dos avisos. A Hash recebeu formatação e comentários focados em propriedade e religações. Foram adicionados casos de massa válida, expoente fora da faixa, números negativos, tipo booleano inadequado, capacidade mínima, estabilidade dos ponteiros após expansão e candidato caro ignorado pelo guloso.
+
+Após essas alterações: compilação normal, 12 grupos internos e CTest 1/1 passaram; compilação ASan/UBSan e CTest com detect_leaks=1 fora do sandbox também passaram, sem diagnósticos.
