@@ -10,9 +10,8 @@ std::string lower(std::string text) { for(auto& c:text) c=static_cast<char>(std:
 LoadSummary BodyCatalog::load(const ParseResult& parsed,const std::string& source) {
     if(parsed.bodies.empty()) throw std::runtime_error("Carga sem corpos válidos; catálogo anterior preservado");
     HashTable replacement;
-    LoadSummary summary{parsed.bodies.size(),0,0,0,parsed.warnings};
+    LoadSummary summary{parsed.bodies.size()+parsed.rejected,0,0,parsed.rejected,parsed.warnings};
     for(const auto& body:parsed.bodies) { if(replacement.insert(body)) ++summary.inserted; else ++summary.updated; }
-    for(const auto& warning:parsed.warnings) if(warning.find("ignorado: id inválido")!=std::string::npos) ++summary.rejected;
     std::string newSource=source;
     table_=std::move(replacement); source_.swap(newSource); return summary;
 }

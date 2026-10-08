@@ -8,14 +8,14 @@ struct CurlRuntime {
     CurlRuntime() { if(curl_global_init(CURL_GLOBAL_DEFAULT)!=CURLE_OK) throw std::runtime_error("Falha ao iniciar libcurl"); }
     ~CurlRuntime() { curl_global_cleanup(); }
 };
-struct Buffer { std::string data; bool failed=false; };
+struct Buffer { std::string data; };
 size_t receive(char* data, size_t size, size_t count, void* context) noexcept {
     auto& buffer=*static_cast<Buffer*>(context);
     constexpr size_t limit=16*1024*1024;
     if(size && count>limit/size) return 0;
     const auto bytes=size*count;
     if(bytes>limit-buffer.data.size()) return 0;
-    try { buffer.data.append(data,bytes); return bytes; } catch(...) { buffer.failed=true; return 0; }
+    try { buffer.data.append(data,bytes); return bytes; } catch(...) { return 0; }
 }
 }
 HttpResponse CurlHttpClient::get(const std::string& url,const std::string& token) const {

@@ -13,7 +13,7 @@ ParseResult parseBodies(const std::string& text) {
     for(const auto& record:root["bodies"]) {
         const std::string prefix="Registro "+std::to_string(index++)+": ";
         if(!record.is_object() || !record.contains("id") || !record["id"].is_string() || record["id"].get<std::string>().empty()) {
-            result.warnings.push_back(prefix+"ignorado: id inválido"); continue;
+            result.warnings.push_back(prefix+"ignorado: id inválido"); ++result.rejected; continue;
         }
         CelestialBody b; b.id=record["id"].get<std::string>();
         auto stringField=[&](const char* name) { if(!record.contains(name) || record[name].is_null()) return std::string{}; if(record[name].is_string()) return record[name].get<std::string>(); result.warnings.push_back(prefix+name+" inválido"); return std::string{}; };

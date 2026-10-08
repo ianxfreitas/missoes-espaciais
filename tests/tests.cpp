@@ -22,7 +22,7 @@ int main() {
     tests.push_back({"modelo", [] { CelestialBody b; b.id="terre"; check(displayName(b)=="terre", "nome alternativo"); check(!b.gravity, "ausência distinta de zero"); }});
     tests.push_back({"parsing", [] {
         auto r=parseBodies(R"({"bodies":[{"id":"x","mass":null,"gravity":0},{"id":"y","gravity":"bad"},{"englishName":"sem id"}]})");
-        check(r.bodies.size()==2,"registros válidos"); check(r.bodies[0].gravity==0,"zero preservado"); check(!r.bodies[0].mass,"massa nula"); check(!r.bodies[1].gravity,"tipo inválido"); check(r.warnings.size()==2,"diagnósticos");
+        check(r.bodies.size()==2,"registros válidos"); check(r.bodies[0].gravity==0,"zero preservado"); check(!r.bodies[0].mass,"massa nula"); check(!r.bodies[1].gravity,"tipo inválido"); check(r.warnings.size()==2 && r.rejected==1,"diagnósticos e rejeição");
         for(auto text:{"{", "[]", "{}"}) { bool threw=false; try { parseBodies(text); } catch(const std::runtime_error&) { threw=true; } check(threw,"rejeição de JSON"); }
     }});
     tests.push_back({"falhas API", [] {
@@ -53,7 +53,8 @@ int main() {
         for(int i=0;keys.size()<4;++i) { auto k="collision"+std::to_string(i); if(HashTable::hashKey(k)%8==0) keys.push_back(k); }
         for(int i=0;i<3;++i) { b.id=keys[i]; t.insert(b); }
         check(t.capacity()==4 && t.collisions()==2,"limiar inclusivo");
-        b.id=keys[3]; t.insert(b); check(t.capacity()==8 && t.rehashes()==1,"expansão"); check(t.collisions()==3,"rehash não conta colisões");
+        const auto* stable=t.find(keys[0]);
+        b.id=keys[3]; t.insert(b); check(stable==t.find(keys[0]),"ponteiro estável após rehash"); check(t.capacity()==8 && t.rehashes()==1,"expansão"); check(t.collisions()==3,"rehash não conta colisões");
         for(int i=0;i<1000;++i) { b.id="body"+std::to_string(i); b.meanRadius=i; t.insert(b); }
         for(int i=0;i<1000;++i) { auto found=t.find("body"+std::to_string(i)); check(found && found->meanRadius==i,"integridade"); }
         auto stats=t.statistics(); check(stats.elements==1004 && stats.loadFactor<=0.75,"estatísticas");
@@ -103,6 +104,19 @@ int main() {
         check(text.find("Erro:")!=std::string::npos,"entrada inválida"); check(text.find("Mars")!=std::string::npos,"consulta"); check(text.find("Diferença gravidade")!=std::string::npos,"comparação"); check(text.find("Colisões de inserção")!=std::string::npos,"instrumentação"); check(text.find("Benefício total")!=std::string::npos,"planejamento"); check(c.find("mars"),"falha local preserva dados");
         std::istringstream eof("8\n"); std::ostringstream end; TerminalUI(c,api,eof,end).run(); check(end.str().find("Entrada encerrada")!=std::string::npos,"EOF durante operação");
         std::istringstream local(std::string("1\n2\n")+FIXTURE_PATH+"\n9\n"); std::ostringstream log; TerminalUI(c,api,local,log).run(); check(c.source().find("JSON local:")==0,"origem explícita");
+    }});
+    tests.push_back({"parsing massa e extremos", [] {
+        auto r=parseBodies(R"({"bodies":[{"id":"good","mass":{"massValue":5.97,"massExponent":24},"isPlanet":false},{"id":"bad","mass":{"massValue":-1,"massExponent":24},"gravity":-1,"avgTemp":true,"isPlanet":"false"},{"id":"exponent","mass":{"massValue":1,"massExponent":18446744073709551615}},null,{"id":""}]})");
+        check(r.bodies.size()==3 && r.rejected==2,"rejeitados"); check(r.bodies[0].mass && r.bodies[0].mass->exponent==24,"massa científica"); check(r.bodies[0].isPlanet && !*r.bodies[0].isPlanet,"false preservado");
+        check(!r.bodies[1].mass && !r.bodies[1].gravity && !r.bodies[1].avgTemp && !r.bodies[1].isPlanet,"atributos inválidos"); check(!r.bodies[2].mass,"expoente fora de faixa");
+        BodyCatalog c; auto summary=c.load(r,"extremos"); check(summary.received==5 && summary.rejected==2,"resumo conta todos os registros");
+        bool threw=false; try { readLocalJson("/arquivo/inexistente"); } catch(const std::runtime_error&) { threw=true; } check(threw,"arquivo ausente");
+    }});
+    tests.push_back({"limites pequenos da hash e candidato ignorado", [] {
+        HashTable table(1); CelestialBody b; b.id="one"; table.insert(b); check(table.capacity()==2 && table.loadFactor()==0.5,"capacidade mínima");
+        auto collisions=table.collisions(); auto rehashes=table.rehashes(); table.insert(b); check(table.collisions()==collisions && table.rehashes()==rehashes,"duplicata não expande");
+        auto p=planMissions({{"expensive","",100,50},{"fits","",1,1}},1,1); check(p.selected.size()==1 && p.selected[0].id=="fits","continua após candidato caro");
+        check(planMissions({{"zero","",0,1}},10,1).selected.empty(),"benefício zero não ocupa recurso");
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }
