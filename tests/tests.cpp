@@ -5,6 +5,9 @@
 #include "cronicas/TrieIndex.hpp"
 #include "cronicas/BTreeIndex.hpp"
 #include <type_traits>
+#include "cronicas/MissionPlanner.hpp"
+#include <limits>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -70,6 +73,24 @@ int main() {
     tests.push_back({"interfaces Parte 2", [] {
         static_assert(std::is_abstract_v<TrieIndex> && std::is_abstract_v<BTreeIndex>);
         static_assert(std::has_virtual_destructor_v<TrieIndex> && std::has_virtual_destructor_v<BTreeIndex>);
+    }});
+    tests.push_back({"guloso e contraexemplo", [] {
+        std::vector<MissionCandidate> c={{"a","A",12,6},{"b","B",9,5},{"c","C",9,5}};
+        auto p=planMissions(c,10,2); check(p.selected.size()==1 && p.selected[0].id=="a" && p.totalBenefit==12,"guloso");
+        check(c[1].cost+c[2].cost==10 && c[1].benefit+c[2].benefit>p.totalBenefit,"solução melhor 18");
+        check(planMissions(c,0,2).selected.empty(),"orçamento zero"); check(planMissions(c,100,0).selected.empty(),"limite zero"); check(planMissions({},10,2).selected.empty(),"sem candidatos");
+        p=planMissions(c,16,3); check(p.totalCost==16 && p.selected.size()==3,"fronteira orçamento");
+        auto tied=planMissions({{"z","Z",10,5},{"a","A",10,5},{"x","X",4,2}},20,3); check(tied.selected[0].id=="x" && tied.selected[1].id=="a","desempates");
+        for(double bad:{-1.0,std::numeric_limits<double>::infinity()}) { bool threw=false; try { planMissions(c,bad,1); } catch(const std::invalid_argument&) { threw=true; } check(threw,"orçamento inválido"); }
+        bool threw=false; try { planMissions({{"a","",1,0}},10,1); } catch(const std::invalid_argument&) { threw=true; } check(threw,"custo zero");
+        threw=false; try { planMissions({c[0],c[0]},10,2); } catch(const std::invalid_argument&) { threw=true; } check(threw,"duplicado");
+    }});
+    tests.push_back({"estimativas físicas", [] {
+        CelestialBody b; b.id="mars"; b.bodyType="Planet"; b.meanRadius=100; b.gravity=9.80665;
+        auto c=estimateCandidates({&b}); check(c.candidates.size()==1,"elegível");
+        check(std::abs(c.candidates[0].benefit-(8+2*std::log10(2)))<1e-10,"fórmula benefício");
+        check(std::abs(c.candidates[0].cost-(12+5*std::log10(2)))<1e-10,"fórmula custo");
+        b.gravity=0; check(estimateCandidates({&b}).excluded.size()==1,"zero excluído"); b.id="terre"; check(estimateCandidates({&b}).excluded.size()==1,"base excluída");
     }});
     int failures=0;
     for (const auto& t:tests) { try { t.second(); std::cout<<"PASS "<<t.first<<'\n'; } catch(const std::exception& e) { ++failures; std::cerr<<"FAIL "<<t.first<<": "<<e.what()<<'\n'; } }
