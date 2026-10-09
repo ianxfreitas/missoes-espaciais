@@ -41,7 +41,7 @@ ctest --test-dir build --output-on-failure
 
 **Fala sugerida:**
 
-> “Nosso sistema organiza dados reais do Sistema Solar e seleciona destinos com recursos limitados. A Parte 1 usa uma Tabela Hash própria e um algoritmo guloso. O main cria o catálogo, o cliente HTTP, o cliente da API e o menu. O menu lê uma opção e chama o módulo responsável; ele não implementa a estrutura de dados.”
+> “A ideia do nosso trabalho é pegar informações do Sistema Solar, organizar esses dados e ajudar a escolher quais destinos explorar. Vou mostrar isso pelo menu e, em cada opção, abrir a parte do código que faz o trabalho. Aqui no main o programa prepara tudo e abre o menu. A partir daí, cada opção chama a função responsável.”
 
 **Fluxo para apontar no código:**
 
@@ -63,13 +63,13 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “Esta opção faz um GET durante a execução. O cliente obtém o token da variável de ambiente e envia autenticação Bearer. O módulo HTTP trata transporte, TLS e timeouts; o cliente da API verifica o status. O parser converte o JSON em corpos celestes. Campos opcionais podem estar ausentes, e ausência não vira zero. O catálogo insere os corpos numa Hash temporária e só substitui os dados anteriores quando a carga termina.”
+> “Aqui o programa busca os dados na API. A chave de acesso fica fora do código, numa variável do ambiente. Quando a resposta chega, conferimos se deu tudo certo e transformamos os dados em objetos que o programa consegue usar. Nem todos os corpos têm todas as informações, então tratamos o que estiver faltando. Primeiro montamos a nova tabela; só depois trocamos os dados antigos. Assim, se a carga falhar, não perdemos o que já tínhamos.”
 
 **Apontar:** o modelo em [include/cronicas/CelestialBody.hpp](include/cronicas/CelestialBody.hpp), especialmente `id` e `std::optional`.
 
 **Concluir:**
 
-> “Depois dessa carga, as consultas usam dados em memória e não precisam chamar a API novamente.”
+> “Depois de carregar, os dados ficam na memória do programa. Então a gente pode consultar e filtrar sem precisar acessar a internet toda vez.”
 
 **Se a API falhar:** explicar a mensagem e escolher `1 → 2 → tests/fixtures/bodies.json`. Dizer explicitamente que passou a usar o conjunto local de teste. Não gastar tempo tentando resolver a rede durante a apresentação.
 
@@ -81,7 +81,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “O catálogo delega esta consulta diretamente à Hash. Calculamos o hash do ID e o índice pelo resto da divisão pela capacidade. Percorremos somente a lista desse balde e comparamos os IDs. Se encontramos, devolvemos um ponteiro constante para o corpo; se não, nullptr. Esse ponteiro não é dono do objeto. A busca tem custo esperado O(1) para IDs de tamanho limitado e boa distribuição, mas pode chegar a O(n) se muitas chaves ficarem na mesma cadeia.”
+> “Aqui vou buscar a Terra pelo ID terre. A Hash usa esse identificador para decidir em qual posição procurar. Em vez de conferir todos os corpos, ela vai até aquela posição e olha a lista que está ali. Encontrando o ID, mostra os dados; se não encontrar, avisa. Normalmente essa busca é rápida, mas pode demorar mais se muitos corpos acabarem na mesma lista.”
 
 **Apontar:** `showBody()` só apresenta o resultado; não realiza a busca. Não repetir a consulta com ID inexistente, salvo se houver tempo ou pergunta.
 
@@ -93,7 +93,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “A Hash está indexada por ID, não por nome. Nesta pesquisa percorremos os corpos, normalizamos maiúsculas e minúsculas e procuramos o trecho informado. O select mantém os resultados que satisfazem a condição e os ordena por ID. A varredura é linear no catálogo, com um custo adicional de ordenação dos resultados.”
+> “Agora vou procurar pelo nome. Como a nossa Hash foi organizada pelo ID, aqui a busca funciona de outro jeito: passamos pelos corpos e vemos quais nomes contêm o texto digitado. Não faz diferença escrever em maiúsculas ou minúsculas. Depois, organizamos os resultados pelo ID para mostrar sempre na mesma ordem.”
 
 **Só mencionar:** o mesmo submenu permite intervalos de gravidade, raio ou temperatura por `filterRange()`, com limites inclusivos e exclusão de campos ausentes.
 
@@ -105,7 +105,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “A listagem percorre os baldes e suas cadeias. O resultado contém ponteiros constantes para os corpos já armazenados, sem copiar cada corpo. O catálogo ordena por ID antes de exibir.”
+> “Essa opção mostra todos os corpos que já carregamos. O programa passa pelas posições da tabela e pelas listas de cada posição, reúne os resultados e mostra tudo em ordem de ID. Não precisa buscar os dados na API de novo.”
 
 ## 3:45–4:15 — Opção 5: filtrar
 
@@ -115,7 +115,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “O filtro reutiliza o select com uma condição diferente: aceitar apenas o tipo solicitado. Também podemos filtrar pela condição de planeta. Um campo isPlanet ausente não é confundido com false. As operações compartilham a mesma varredura, evitando duplicar a lógica de percorrer a estrutura.”
+> “Aqui eu escolho o tipo de corpo que quero ver, por exemplo, só planetas. A função passa pelos dados e deixa na lista de resultados apenas os que combinam com o filtro. Também dá para escolher pela indicação de planeta. Se essa informação estiver faltando, não vamos assumir que a resposta é não.”
 
 ## 4:15–4:45 — Opção 6: comparar dois corpos
 
@@ -125,7 +125,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “Esta é a operação adicional do projeto. Buscamos os dois IDs na Hash, apresentamos os atributos e calculamos diferenças de gravidade, raio e temperatura quando os dois valores existem. A comparação ajuda a interpretar destinos. O semieixo maior é um parâmetro orbital e não representa distância real de viagem.”
+> “Essa opção serve para colocar dois corpos lado a lado. Vou comparar a Terra com Marte. O programa busca os dois pela Hash e mostra as diferenças de gravidade, tamanho e temperatura, quando esses dados estão disponíveis. Isso ajuda a entender melhor os possíveis destinos. Esse valor de semieixo maior descreve a órbita; ele não diz quanto uma nave teria que viajar.”
 
 ## 4:45–6:25 — Opção 7: estatísticas e funcionamento interno da Hash
 
@@ -135,11 +135,11 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida, em três blocos:**
 
-> “Cada balde guarda um ponteiro para a cabeça de uma lista própria. Cada nó contém o corpo, seu hash e o ponteiro next. Se duas chaves diferentes chegam ao mesmo balde, ficam na mesma lista: isso é encadeamento separado. Uma duplicata atualiza o corpo, sem aumentar a quantidade.”
+> “A tabela tem várias posições, e cada uma aponta para uma lista. Cada item dessa lista guarda um corpo e aponta para o próximo. Se dois IDs diferentes caem na mesma posição, colocamos os dois na lista. É assim que resolvemos as colisões. Se o mesmo ID chegar de novo, atualizamos seus dados em vez de guardar uma cópia repetida.”
 
-> “A estrutura conta uma colisão quando uma chave nova é inserida num balde já ocupado, depois de eventual expansão. Conta um evento por inserção, não por comparação. Atualizações e religações do rehashing não incrementam esse contador. O fator de carga é quantidade dividida pela capacidade. Estas métricas são calculadas dentro da própria Hash.”
+> “Esses números são contados pela própria tabela. Contamos uma colisão quando um ID novo entra numa posição que já tem alguém, considerando a tabela depois de uma eventual expansão. Atualizar um ID existente ou reorganizar a tabela não aumenta esse contador. O fator de carga é a quantidade de corpos dividida pela quantidade de posições. Ele ajuda a acompanhar quanto a tabela está ocupada.”
 
-> “Se a próxima inserção ultrapassar 0,75, dobramos a capacidade. O rehashing usa o hash armazenado e o novo módulo para religar os mesmos nós, sem copiar os corpos. Uma expansão custa O(n) quando a capacidade é proporcional à quantidade. Como as capacidades dobram, os custos seguem uma soma geométrica e o trabalho total de expansão é O(n) numa sequência de inserções. Portanto, o custo de expansão por inserção é O(1) amortizado. Isso não elimina o pior caso de uma cadeia mal distribuída.”
+> “Quando uma inserção faria esse fator passar de 0,75, dobramos o tamanho da tabela e reorganizamos os itens. Esse processo se chama rehashing. Os corpos continuam nos mesmos nós; mudamos as ligações para colocá-los nas posições certas. Reorganizar tudo dá trabalho, mas não acontece a cada inserção. Como a capacidade dobra, esse trabalho fica diluído ao longo das inserções. É isso que explicamos na análise amortizada: a expansão tem custo constante por inserção quando olhamos a sequência inteira. A busca ainda pode ser ruim se muitos IDs caírem juntos.”
 
 **Não decorar números de uma carga anterior:** mostrar os contadores efetivamente produzidos naquele momento. O contador histórico de colisões não mede quantos baldes estão ocupados agora.
 
@@ -151,7 +151,7 @@ main → TerminalUI::run → operação escolhida
 
 **Fala sugerida:**
 
-> “O planejamento tem duas restrições: orçamento e quantidade de missões. Primeiro estimamos os candidatos usando categoria, raio e gravidade. A Terra é a base; estrelas e corpos sem dados físicos suficientes ficam fora do planejamento, mas continuam consultáveis. Os custos e benefícios são didáticos, não valores reais de missões.”
+> “Aqui a ideia é escolher destinos sem passar do orçamento e do número de missões que a gente definiu. Vou usar orçamento 100 e até três missões. O programa dá uma pontuação de benefício e um custo estimado para cada destino, usando o tipo, o raio e a gravidade. Esses valores são inventados para o exercício, não são preços reais de viagens espaciais. A Terra é nossa base, e destinos sem dados suficientes ficam de fora dessa escolha, mas continuam disponíveis nas consultas.”
 
 **Apontar as fórmulas em `estimateCandidates()`:**
 
@@ -162,11 +162,11 @@ benefício = peso da categoria + 2R
 custo = 10 + 5R + 2G
 ```
 
-> “Ordenamos por benefício dividido pelo custo, em ordem decrescente. Empates usam menor custo e depois ID. Percorremos essa ordem e selecionamos quem cabe no orçamento restante enquanto houver vagas. Se um candidato não cabe, continuamos com os seguintes. A ordenação domina o custo, O(n log n).”
+> “Depois, o programa dá prioridade a quem oferece mais benefício por unidade de custo. Ele começa pelos melhores nessa comparação e vai escolhendo enquanto houver dinheiro e vagas. Se um destino não cabe no orçamento que sobrou, pula esse e tenta o próximo. Se houver empate, escolhe o mais barato e depois usa o ID. É por isso que chamamos de guloso: ele escolhe o que parece melhor naquele momento.”
 
 **Apontar os totais e explicar a limitação:**
 
-> “O resultado respeita as restrições, mas não garante o ótimo. No nosso teste, A custa 6 e beneficia 12; B e C custam 5 e beneficiam 9 cada. Com orçamento 10 e limite 2, o guloso escolhe A pela melhor razão e obtém 12. B mais C obteria 18. Esse caso mostra a diferença entre a melhor escolha local e a melhor combinação global.”
+> “Essa escolha respeita os limites, mas pode deixar passar uma combinação melhor. No nosso teste, A custa 6 e dá benefício 12. B e C custam 5 cada e dão benefício 9 cada. Com orçamento 10, o programa escolhe A primeiro pela melhor relação entre benefício e custo, e não consegue levar mais nenhum. Só que B junto com C daria 18. Então a estratégia é simples e rápida, mas não garante o melhor resultado possível.”
 
 ## 8:05–8:20 — Opção 9: encerrar e liberar memória
 
@@ -176,7 +176,7 @@ custo = 10 + 5R + 2G
 
 **Fala sugerida:**
 
-> “Ao sair do main, o catálogo é destruído e a Hash libera todos os nós. O clear guarda o próximo endereço antes do delete e percorre as listas sem recursão. A cópia da tabela é proibida para evitar dupla liberação; a movimentação transfere a propriedade.”
+> “Ao encerrar, a tabela libera a memória dos itens que criou. Aqui no clear, antes de apagar um item, guardamos onde está o próximo para continuar percorrendo a lista. Também impedimos a cópia da tabela, para evitar que duas tabelas tentem liberar os mesmos itens.”
 
 ## 8:20–9:00 — Testes e interfaces futuras
 
@@ -184,7 +184,7 @@ custo = 10 + 5R + 2G
 
 **Fala sugerida:**
 
-> “Os testes cobrem inserção, busca, duplicatas, colisões controladas, rehashing e integridade dos dados, além de parsing, falhas de API simuladas, filtros e planejamento. Temos um teste específico do contraexemplo guloso. Para a Parte 2, projetamos contratos abstratos: Trie para nomes e prefixos, e Árvore B para consultas ordenadas e intervalos. Elas ainda não estão implementadas. Seus resultados serão IDs que o catálogo resolve na Hash.”
+> “Também fizemos testes para conferir buscas, colisões, atualização de IDs e crescimento da tabela, além da leitura dos dados, dos filtros e do planejamento. O exemplo em que o guloso perde para uma combinação melhor está entre esses testes. Para a próxima parte, já deixamos definidos os caminhos para usar uma Trie em buscas por nome e prefixo, e uma Árvore B em consultas por valor e intervalo. Por enquanto, só planejamos essas interfaces; as duas estruturas ainda não foram implementadas.”
 
 Se os testes tiverem sido executados antes da apresentação, mostrar o resultado real no terminal. Não afirmar aprovação de uma execução que não ocorreu.
 
