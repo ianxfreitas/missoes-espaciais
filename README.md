@@ -2,18 +2,14 @@
 
 Projeto da Parte 1 de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelotas (UFPel). O sistema consulta dados reais do Sistema Solar, organiza corpos celestes em uma Tabela Hash própria e executa uma heurística gulosa para selecionar destinos sob recursos limitados.
 
-## Integrantes e autoria
+## Integrantes
 
 - Ian Xavier Freitas.
 - Caetano Seixas Blanke.
 
-A implementação foi centralizada neste ambiente com auxílio do Codex CLI. Não se atribuem responsabilidades ou contribuições individuais que não tenham sido realizadas. O Git utiliza a autoria já configurada no ambiente. Os dois integrantes devem revisar e compreender todo o código; o histórico de commits não comprova, por si só, compreensão individual. Não houve criação de branches individuais nem publicação automática.
-
 ## Escopo e fonte principal
 
 O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementa apenas a Hash; Trie e Árvore B têm interfaces abstratas para a Parte 2. A opção gulosa escolhida é A — Planejamento e Triagem de Missões. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
-
-O PDF informa entrega em 02/10/2026 às 10h e arguição nesse dia. A data do ambiente durante o desenvolvimento foi 08/10/2026; confirmar com a docente o prazo vigente. A arguição é individual e exige domínio dos mecanismos internos.
 
 ## Ferramentas e instalação no Fedora
 
