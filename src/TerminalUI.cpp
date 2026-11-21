@@ -168,8 +168,8 @@ void TerminalUI::plan(bool dynamic) {
 void TerminalUI::networkMenu() {
     const auto mode = integer(
         "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento, "
-        "4 ordenar atividades: ",
-        4);
+        "4 ordenar atividades, 5 planejar infraestrutura: ",
+        5);
     if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
@@ -181,8 +181,10 @@ void TerminalUI::networkMenu() {
         showNetwork(*network_);
     } else if (mode == 3) {
         planRoute(*network_);
-    } else {
+    } else if (mode == 4) {
         showActivityOrder(*network_);
+    } else {
+        showInfrastructurePlan(*network_);
     }
 }
 void TerminalUI::planRoute(const MissionNetwork& network) {
@@ -222,6 +224,26 @@ void TerminalUI::showActivityOrder(const MissionNetwork& network) {
         if (const auto* body = catalog_.find(bodyId)) output_ << " | " << displayName(*body);
         output_ << '\n';
     }
+}
+void TerminalUI::showInfrastructurePlan(const MissionNetwork& network) {
+    const auto plan = planInfrastructure(network);
+    if (plan.componentCount == 0) {
+        output_ << "O cenário não contém pontos de infraestrutura.\n";
+        return;
+    }
+    if (plan.componentCount == 1) {
+        output_ << "Árvore geradora mínima de infraestrutura\n";
+    } else {
+        output_ << "Rede de infraestrutura desconexa (" << plan.componentCount
+                << " componentes).\nFloresta geradora mínima de infraestrutura\n";
+    }
+    output_ << "Conexões selecionadas (" << plan.selectedLinks.size() << ")\n";
+    for (auto index : plan.selectedLinks) {
+        const auto& link = network.infrastructure[index];
+        output_ << "  " << network.vertices[link.first] << " -- "
+                << network.vertices[link.second] << " | custo " << link.cost << '\n';
+    }
+    output_ << "Custo total da infraestrutura: " << plan.totalCost << '\n';
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

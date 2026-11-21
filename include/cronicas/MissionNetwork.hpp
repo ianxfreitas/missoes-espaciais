@@ -48,6 +48,12 @@ struct TravelPlan {
     long double totalCost;
 };
 
+struct InfrastructurePlan {
+    std::vector<std::size_t> selectedLinks;  // Posições em infrastructure.
+    long double totalCost = 0;
+    std::size_t componentCount = 0;
+};
+
 // Retorna nullopt para um destino inalcançável. IDs fora do cenário são inválidos.
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
                                              const std::string& origin,
@@ -56,6 +62,9 @@ std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
 // Retorna índices em activities. Um ciclo produz nullopt.
 // Um cenário sem atividades produz uma ordem vazia.
 std::optional<std::vector<std::size_t>> orderActivities(const MissionNetwork& network);
+
+// Retorna uma floresta mínima. Um único componente indica uma árvore completa.
+InfrastructurePlan planInfrastructure(const MissionNetwork& network);
 
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);

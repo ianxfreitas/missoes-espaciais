@@ -1286,6 +1286,113 @@ int main() {
                        std::string::npos && text.find("Encerrado.") != std::string::npos,
                    "Dijkstra continua disponível no mesmo submenu");
          }});
+    tests.push_back(
+        {"Kruskal árvore completa de custo mínimo", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             const auto plan = planInfrastructure(network);
+             check(plan.componentCount == 1 && plan.totalCost == 8 &&
+                       plan.selectedLinks == std::vector<std::size_t>{0, 1},
+                   "Terra–Lua e Lua–Marte custam 3 + 5, a menor combinação");
+         }});
+    tests.push_back(
+        {"Kruskal custos iguais, custo zero e laços", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "unknown"};
+             network.infrastructure = {{0, 0, 0}, {0, 1, 0}, {1, 2, 2},
+                                       {0, 2, 2}, {2, 3, 2}, {0, 3, 2}};
+             const auto plan = planInfrastructure(network);
+             check(plan.componentCount == 1 && plan.selectedLinks.size() == 3 &&
+                       plan.totalCost == 4,
+                   "uma ligação gratuita e duas de menor custo conectam a rede");
+             check(std::find(plan.selectedLinks.begin(), plan.selectedLinks.end(), 0) ==
+                       plan.selectedLinks.end(),
+                   "laço gratuito não conecta uma nova componente");
+
+             // Confere a conectividade sem impor uma escolha entre empates.
+             std::vector<bool> reachable(network.vertices.size(), false);
+             reachable[0] = true;
+             for (std::size_t pass = 0; pass < network.vertices.size(); ++pass) {
+                 for (auto index : plan.selectedLinks) {
+                     const auto& link = network.infrastructure.at(index);
+                     if (reachable[link.first] || reachable[link.second])
+                         reachable[link.first] = reachable[link.second] = true;
+                 }
+             }
+             check(std::all_of(reachable.begin(), reachable.end(), [](bool value) { return value; }),
+                   "as ligações selecionadas conectam todos os vértices");
+         }});
+    tests.push_back(
+        {"Kruskal floresta mínima e vértices isolados", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "venus", "mercure", "unknown"};
+             network.infrastructure = {{0, 2, 7}, {1, 2, 5}, {0, 1, 3}, {3, 4, 2}};
+             network.routes = {{2, 3, 0}, {4, 5, 0}};
+             network.transfers = {{0, 3, 10}, {1, 5, 10}};
+             const auto forest = planInfrastructure(network);
+             check(forest.componentCount == 3 && forest.totalCost == 10 &&
+                       forest.selectedLinks == std::vector<std::size_t>{3, 2, 1},
+                   "duas árvores mínimas e um isolado sem usar deslocamentos ou canais");
+
+             network.infrastructure.clear();
+             const auto isolated = planInfrastructure(network);
+             check(isolated.componentCount == 6 && isolated.selectedLinks.empty() &&
+                       isolated.totalCost == 0,
+                   "cada vértice isolado conta como um componente");
+             network = MissionNetwork{};
+             network.vertices = {"terre"};
+             const auto single = planInfrastructure(network);
+             check(single.componentCount == 1 && single.selectedLinks.empty() && single.totalCost == 0,
+                   "um único vértice já está conectado");
+             const auto empty = planInfrastructure(MissionNetwork{});
+             check(empty.componentCount == 0 && empty.selectedLinks.empty() && empty.totalCost == 0,
+                   "cenário vazio tem zero componentes e custo zero");
+         }});
+    tests.push_back(
+        {"Kruskal validação de ligações de infraestrutura", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune"};
+             const InfrastructureLink invalid[] = {
+                 {0, 2, 1}, {2, 0, 1}, {0, 1, -1},
+                 {0, 1, std::numeric_limits<double>::infinity()},
+                 {0, 1, std::numeric_limits<double>::quiet_NaN()},
+             };
+             for (const auto& link : invalid) {
+                 network.infrastructure = {{0, 1, 3}, link};
+                 bool rejected = false;
+                 try {
+                     planInfrastructure(network);
+                 } catch (const std::invalid_argument&) {
+                     rejected = true;
+                 }
+                 check(rejected, "valida todas as ligações antes de ordenar e selecionar");
+             }
+         }});
+    tests.push_back(
+        {"menu Kruskal e regressão de Dijkstra e Kahn", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             std::istringstream input("11\n5\n11\n1\n" + scenario +
+                                      "\n11\n5\n11\n3\nterre\nmars\n11\n4\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto tree = text.find("Árvore geradora mínima de infraestrutura\n");
+             check(text.find("Nenhum cenário de rede carregado.") < tree &&
+                       text.find("Conexões selecionadas (2)\n"
+                                 "  terre -- lune | custo 3\n  lune -- mars | custo 5\n"
+                                 "Custo total da infraestrutura: 8", tree) != std::string::npos,
+                   "menu apresenta as ligações escolhidas e o custo total");
+             check(text.find("Percurso: terre -> lune -> mars\nCusto total: 6", tree) !=
+                       std::string::npos &&
+                       text.find("Ordem de execução das atividades\n  1. prepare", tree) !=
+                           std::string::npos && text.find("Encerrado.") != std::string::npos,
+                   "deslocamentos e ordenação de atividades continuam disponíveis");
+         }});
     int failures = 0;
     for (const auto& t : tests) {
         try {

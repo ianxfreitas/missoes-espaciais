@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento por ID de origem e destino e `4` para ordenar as atividades.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento por ID de origem e destino, `4` para ordenar as atividades e `5` para planejar a infraestrutura.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -364,9 +364,21 @@ Se a fila se esgotar antes de processar todas as atividades, existe um ciclo de 
 
 Depois de carregar o cenário de exemplo, use `11 → 4`. O menu mostra ID, nome e corpo celeste de cada atividade na sequência `prepare → relay → survey`.
 
+### Planejamento de infraestrutura com Kruskal
+
+`planInfrastructure` ordena as posições das ligações não direcionadas de `infrastructure` por custo crescente. Em empate, mantém a ordem do cenário. Cada ponto começa em seu próprio componente. Uma ligação entra no plano quando seus extremos pertencem a componentes diferentes. A ligação mais barata que cruza essa separação pode ser escolhida sem perder uma solução de custo mínimo. A união reduz em um o número de componentes.
+
+O Union-Find guarda o pai de cada vértice e o tamanho de cada componente em sua raiz. Encontrar a raiz comprime o caminho, fazendo os vértices visitados apontarem diretamente para ela. A união liga a raiz do componente menor à do maior. Ligações entre extremos da mesma componente são puladas para manter a solução acíclica.
+
+Com um componente, o menu apresenta uma árvore geradora mínima. Se restarem vários componentes ao fim das ligações disponíveis, apresenta uma floresta geradora mínima e informa que a rede está desconexa. Os vértices isolados contam como componentes de custo zero. O caso de um único vértice é uma árvore trivial de custo zero.
+
+Com `V` vértices e `E` ligações de infraestrutura, o tempo é `O(V + E log(E + 1))`, dominado pela ordenação das ligações. As operações do Union-Find são quase constantes em custo amortizado. O espaço auxiliar é `O(V + E)` para os conjuntos, os índices ordenados e as ligações selecionadas.
+
+Para reproduzir no cenário de exemplo, carregue `scenarios/solar-network.json` e use `11 → 5`. As duas ligações selecionadas são `terre -- lune` (3) e `lune -- mars` (5), com custo total 8.
+
 ## Testes e validação
 
-A suíte possui 37 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu. Os testes de Kahn conferem que cada atividade aparece uma vez e após todos os seus pré-requisitos. Também cobrem atividades isoladas, cenário vazio, ciclos, autodependências e o novo modo do menu.
+A suíte possui 42 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu. Os testes de Kahn verificam a ordem das atividades, pré-requisitos, ciclos e cenário sem atividades. Os testes de Kruskal conferem os custos mínimos de árvores e florestas, empates, ligações de custo zero, vértices isolados, entradas inválidas e o fluxo do submenu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

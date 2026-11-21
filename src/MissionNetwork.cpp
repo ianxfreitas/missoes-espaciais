@@ -6,6 +6,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <numeric>
 #include <queue>
 #include <set>
 #include <sstream>
@@ -86,6 +87,37 @@ void readRelations(const json& root, const char* section, const Positions& posit
         addRelation(entry, from, to);
     });
 }
+
+class DisjointSets {
+    std::vector<std::size_t> parent_;
+    std::vector<std::size_t> size_;
+
+    std::size_t findRoot(std::size_t vertex) {
+        auto root = vertex;
+        while (parent_[root] != root) root = parent_[root];
+        while (vertex != root) {
+            const auto next = parent_[vertex];
+            parent_[vertex] = root;
+            vertex = next;
+        }
+        return root;
+    }
+
+   public:
+    explicit DisjointSets(std::size_t count) : parent_(count), size_(count, 1) {
+        std::iota(parent_.begin(), parent_.end(), std::size_t{0});
+    }
+
+    bool unite(std::size_t first, std::size_t second) {
+        auto rootA = findRoot(first);
+        auto rootB = findRoot(second);
+        if (rootA == rootB) return false;
+        if (size_[rootA] < size_[rootB]) std::swap(rootA, rootB);
+        parent_[rootB] = rootA;
+        size_[rootA] += size_[rootB];
+        return true;
+    }
+};
 }  // namespace
 
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
@@ -175,6 +207,40 @@ std::optional<std::vector<std::size_t>> orderActivities(const MissionNetwork& ne
 
     if (order.size() != count) return std::nullopt;
     return order;
+}
+
+InfrastructurePlan planInfrastructure(const MissionNetwork& network) {
+    const auto count = network.vertices.size();
+    for (const auto& link : network.infrastructure) {
+        if (link.first >= count || link.second >= count)
+            throw std::invalid_argument("Ligação de infraestrutura com extremidade fora do cenário");
+        if (!std::isfinite(link.cost) || link.cost < 0)
+            throw std::invalid_argument("Custo de infraestrutura deve ser finito e não negativo");
+    }
+
+    // Ordena posições para preservar as ligações e a ordem do cenário.
+    std::vector<std::size_t> links(network.infrastructure.size());
+    std::iota(links.begin(), links.end(), std::size_t{0});
+    std::sort(links.begin(), links.end(), [&](std::size_t a, std::size_t b) {
+        const auto costA = network.infrastructure[a].cost;
+        const auto costB = network.infrastructure[b].cost;
+        if (costA != costB) return costA < costB;
+        return a < b;
+    });
+
+    DisjointSets components(count);
+    InfrastructurePlan plan;
+    plan.componentCount = count;
+    for (auto index : links) {
+        const auto& link = network.infrastructure[index];
+        if (!components.unite(link.first, link.second)) continue;
+        plan.selectedLinks.push_back(index);
+        plan.totalCost += link.cost;
+        if (--plan.componentCount == 1) break;
+    }
+    if (!std::isfinite(plan.totalCost))
+        throw std::overflow_error("Custo total da infraestrutura fora da faixa numérica");
+    return plan;
 }
 
 MissionNetwork parseMissionNetwork(const std::string& text,
