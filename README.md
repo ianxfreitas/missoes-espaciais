@@ -9,7 +9,7 @@ Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelota
 
 ## Escopo e fonte principal
 
-O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 incorpora a Trie para busca por nome, a Árvore B para buscas por atributos físicos e a otimização de recursos por programação dinâmica. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
+O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 incorpora a Trie para busca por nome, a Árvore B para buscas por atributos físicos, a otimização de recursos por programação dinâmica e a representação da rede espacial. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
 
 ## Ferramentas e instalação no Fedora
 
@@ -135,6 +135,8 @@ Massa é mantida em notação científica, sem expandir potências desnecessaria
 | `TrieIndex` | Interface e implementação da Trie para nomes |
 | `BTreeIndex` | Interface e implementação da Árvore B para atributos físicos |
 | `MissionPlanner` | Estimativas físicas, seleção gulosa e otimização por programação dinâmica |
+| `MissionNetwork` | Representação e validação do cenário da rede espacial |
+| `scenarios/solar-network.json` | Cenário didático com Terra, Lua e Marte |
 | `TerminalUI`, `main.cpp` | Menu, leitura e apresentação |
 | `tests/tests.cpp` | Suíte sem dependência de rede |
 | `tests/fixtures/bodies.json` | Entrada local de teste |
@@ -230,6 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
+11. Rede espacial. Use `1` para carregar um cenário JSON e `2` para visualizar os vértices, as ligações e as atividades.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -322,9 +325,30 @@ O maior benefício entre as quantidades de `0` a `K` determina o plano. Os empat
 
 Para `n` candidatos considerados, orçamento efetivo `B` em centésimos e limite efetivo `K`, a programação dinâmica consome tempo `O(n K B)`. Os benefícios ocupam `O(K B)` e as decisões de reconstrução ocupam `O(n K B)` bytes. A validação e a ordenação por ID dos candidatos de entrada acrescentam `O(N log N)` para `N` candidatos. Antes das alocações, o algoritmo reduz a capacidade à soma dos custos relevantes, reduz `K` ao número de escolhas possíveis e verifica o limite de 64 MiB para as duas tabelas. Cenários que excedem o limite geram um erro e podem ser avaliados com orçamento ou limite de missões menor.
 
+## Rede espacial
+
+Os vértices usam os IDs exatos dos corpos celestes, validados no catálogo carregado. O cenário guarda esses IDs na ordem de entrada e usa suas posições como índices internos das extremidades. Isso permite ligar os registros diretamente e montar listas de adjacência a partir das arestas. Atividades têm IDs próprios e apontam para seu corpo; os pré-requisitos usam as posições das atividades.
+
+| Lista JSON | Campos e significado |
+|---|---|
+| `vertices` | IDs dos corpos do catálogo |
+| `routes` | `from`, `to`, `cost`. Deslocamento direcionado, com custo finito não negativo |
+| `infrastructure` | `a`, `b`, `cost`. Ligação não direcionada, com custo de implantação finito não negativo |
+| `transfers` | `from`, `to`, `capacity`. Canal direcionado, com capacidade inteira não negativa de até 64 bits |
+| `activities` | `id`, `name`, `body`. Atividade e local no cenário |
+| `dependencies` | `before`, `after`. A atividade de `before` é pré-requisito de `after` |
+
+As seis listas são obrigatórias e podem ser vazias. Redes desconexas, vértices isolados, ciclos e autodependências são representáveis. O carregador rejeita referências fora do cenário, IDs de corpo ausentes no catálogo, IDs repetidos e relações duplicadas na mesma lista. Em infraestrutura, `a–b` e `b–a` representam a mesma ligação. Nas listas direcionadas, sentidos opostos são relações distintas. Um mesmo par pode aparecer em listas diferentes com dados próprios. Os IDs das atividades são independentes dos IDs dos corpos.
+
+O cenário de exemplo usa Terra (`terre`), Lua (`lune`) e Marte (`mars`). Os custos de deslocamento em unidades didáticas permitem comparar um trajeto direto de custo 8 com duas etapas de custos 2 e 4. O retorno direto de Marte tem custo 9 para representar assimetria. Os custos de implantação 3, 5 e 7 oferecem alternativas de conexão. As capacidades inteiras 5, 4 e 2, em unidades de recurso por período, permitem estudar um gargalo no trecho Lua–Marte e um canal direto de capacidade menor. Esses pesos são parâmetros didáticos independentes dos atributos físicos da API.
+
+Na raiz do repositório, execute `./build/missoes --json tests/fixtures/bodies.json`. No menu, use `11 → 1`, informe `scenarios/solar-network.json` e depois use `11 → 2`. Se a carga do cenário falhar, o cenário anterior fica disponível. Uma recarga bem-sucedida do catálogo preserva a rede se todos os seus IDs ainda existirem. Quando algum ID falta, o menu informa que a rede foi descartada.
+
+Para `V` corpos, `A` atividades e `E` relações totais, o cenário ocupa `O(V + A + E)`. Os mapas e conjuntos temporários usados para resolver IDs e checar duplicatas têm o mesmo limite de espaço. Percorrer a representação ou construir listas de adjacência a partir dela custa `O(V + A + E)`.
+
 ## Testes e validação
 
-A suíte possui 26 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu.
+A suíte possui 30 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

@@ -1,5 +1,6 @@
 #include "cronicas/TerminalUI.hpp"
 #include "cronicas/MissionPlanner.hpp"
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -98,6 +99,11 @@ void TerminalUI::load() {
             << " rejeitados. Avisos: " << summary.warnings.size() << '\n';
     for (size_t i = 0; i < summary.warnings.size() && i < 10; ++i)
         output_ << summary.warnings[i] << '\n';
+    if (network_ && std::any_of(network_->vertices.begin(), network_->vertices.end(),
+                                [this](const auto& id) { return !catalog_.find(id); })) {
+        network_.reset();
+        output_ << "Rede descartada: o novo catálogo não contém todos os seus vértices.\n";
+    }
     showStats();
 }
 void TerminalUI::compare() {
@@ -159,13 +165,60 @@ void TerminalUI::plan(bool dynamic) {
     showPlan(planMissions(estimates.candidates, budget, limit), true);
     output_ << "A heurística não garante o ótimo global.\n";
 }
+void TerminalUI::networkMenu() {
+    const auto mode = integer("Rede espacial: 1 carregar cenário, 2 visualizar: ", 2);
+    if (mode == 1) {
+        const auto path = read("Caminho do cenário JSON: ");
+        network_ = readMissionNetwork(path, catalog_);
+        output_ << "Rede carregada: " << network_->vertices.size() << " vértices.\n";
+    } else if (mode == 2) {
+        if (network_)
+            showNetwork(*network_);
+        else
+            output_ << "Nenhum cenário de rede carregado.\n";
+    } else {
+        throw std::invalid_argument("Opção de rede inválida");
+    }
+}
+void TerminalUI::showNetwork(const MissionNetwork& network) {
+    const auto vertexId = [&](size_t position) -> const std::string& {
+        return network.vertices[position];
+    };
+
+    output_ << "Vértices (" << network.vertices.size() << ")\n";
+    for (const auto& id : network.vertices) {
+        output_ << "  " << id;
+        if (const auto* body = catalog_.find(id)) output_ << " | " << displayName(*body);
+        output_ << '\n';
+    }
+    output_ << "Deslocamentos (" << network.routes.size() << ")\n";
+    for (const auto& route : network.routes)
+        output_ << "  " << vertexId(route.from) << " -> " << vertexId(route.to)
+                << " | custo " << route.cost << '\n';
+    output_ << "Infraestrutura (" << network.infrastructure.size() << ")\n";
+    for (const auto& link : network.infrastructure)
+        output_ << "  " << vertexId(link.first) << " -- " << vertexId(link.second)
+                << " | custo " << link.cost << '\n';
+    output_ << "Transferências (" << network.transfers.size() << ")\n";
+    for (const auto& transfer : network.transfers)
+        output_ << "  " << vertexId(transfer.from) << " -> " << vertexId(transfer.to)
+                << " | capacidade " << transfer.capacity << '\n';
+    output_ << "Atividades (" << network.activities.size() << ")\n";
+    for (const auto& activity : network.activities)
+        output_ << "  " << activity.id << " | " << activity.name << " @ "
+                << vertexId(activity.body) << '\n';
+    output_ << "Dependências (" << network.dependencies.size() << ")\n";
+    for (const auto& dependency : network.dependencies)
+        output_ << "  " << network.activities[dependency.before].id << " -> "
+                << network.activities[dependency.after].id << '\n';
+}
 void TerminalUI::run() {
     output_ << std::setprecision(8) << "Crônicas do Espaço — Parte 1\n";
     while (true) {
         try {
             output_
-                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash e da Árvore B\n8 Planejamento guloso\n9 Encerrar\n10 Planejamento por programação dinâmica\n";
-            auto option = integer("Opção: ", 10);
+                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash e da Árvore B\n8 Planejamento guloso\n9 Encerrar\n10 Planejamento por programação dinâmica\n11 Rede espacial\n";
+            auto option = integer("Opção: ", 11);
             if (option == 9) {
                 output_ << "Encerrado.\n";
                 return;
@@ -235,8 +288,11 @@ void TerminalUI::run() {
                 case 10:
                     plan(true);
                     break;
+                case 11:
+                    networkMenu();
+                    break;
                 default:
-                    output_ << "Escolha entre 1 e 10.\n";
+                    output_ << "Escolha entre 1 e 11.\n";
             }
         } catch (const EndInput&) {
             output_ << "\nEntrada encerrada.\n";

@@ -4,11 +4,13 @@
 #include "cronicas/BodyCatalog.hpp"
 #include "cronicas/TrieIndex.hpp"
 #include "cronicas/BTreeIndex.hpp"
+#include "cronicas/MissionNetwork.hpp"
 #include <type_traits>
 #include "cronicas/MissionPlanner.hpp"
 #include <limits>
 #include <cmath>
 #include "cronicas/TerminalUI.hpp"
+#include <nlohmann/json.hpp>
 #include <algorithm>
 #include <sstream>
 #include <cstdlib>
@@ -928,6 +930,165 @@ int main() {
                    "continua após candidato caro");
              check(planMissions({{"zero", "", 0, 1}}, 10, 1).selected.empty(),
                    "benefício zero não ocupa recurso");
+         }});
+    tests.push_back(
+        {"rede espacial cenário de exemplo", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             check(network.vertices == std::vector<std::string>{"terre", "lune", "mars"},
+                   "vértices preservam os IDs do catálogo e a ordem do cenário");
+             check(network.routes.size() == 4 && network.routes[0].from == 0 &&
+                       network.routes[0].to == 1 && network.routes[0].cost == 2 &&
+                       network.routes[3].from == 2 && network.routes[3].to == 0,
+                   "deslocamentos preservam sentidos e custos");
+             check(network.infrastructure.size() == 3 &&
+                       network.infrastructure[0].first == 0 &&
+                       network.infrastructure[0].second == 1 &&
+                       network.infrastructure[0].cost == 3,
+                   "infraestrutura é armazenada como uma ligação por par");
+             check(network.transfers.size() == 3 && network.transfers[0].from == 0 &&
+                       network.transfers[0].to == 1 && network.transfers[0].capacity == 5,
+                   "o mesmo par representa dados independentes em cada relação");
+             check(network.activities.size() == 3 && network.activities[1].id == "relay" &&
+                       network.activities[1].body == 1 &&
+                       network.dependencies.size() == 2 &&
+                       network.dependencies[1].before == 1 && network.dependencies[1].after == 2,
+                   "dependências usam atividades e atividades apontam para locais");
+         }});
+    tests.push_back(
+        {"rede espacial desconexa, limites e ciclos representáveis", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = parseMissionNetwork(R"({
+                 "vertices":["lune","terre","mars"],
+                 "routes":[{"from":"terre","to":"lune","cost":0},
+                           {"from":"lune","to":"terre","cost":0.125}],
+                 "infrastructure":[{"a":"terre","b":"lune","cost":0}],
+                 "transfers":[{"from":"terre","to":"lune","capacity":0},
+                              {"from":"lune","to":"terre","capacity":18446744073709551615}],
+                 "activities":[{"id":"t","name":"T","body":"terre"},
+                               {"id":"l","name":"L","body":"lune"}],
+                 "dependencies":[{"before":"t","after":"l"},{"before":"l","after":"t"},
+                                 {"before":"l","after":"l"}]
+             })", catalog);
+             check(network.vertices.size() == 3 && network.vertices[2] == "mars" &&
+                       network.routes.size() == 2 && network.routes[0].from == 1 &&
+                       network.routes[0].to == 0 && network.routes[0].cost == 0 &&
+                       network.routes[1].from == 0 && network.routes[1].to == 1 &&
+                       network.routes[1].cost == 0.125,
+                   "vértice isolado e arcos opostos com custos distintos");
+             check(network.infrastructure.size() == 1 &&
+                       network.infrastructure[0].first == 0 &&
+                       network.infrastructure[0].second == 1,
+                   "extremidades da ligação não direcionada são canônicas");
+             check(network.transfers.size() == 2 && network.transfers[0].from == 1 &&
+                       network.transfers[0].to == 0 && network.transfers[0].capacity == 0 &&
+                       network.transfers[1].from == 0 && network.transfers[1].to == 1 &&
+                       network.transfers[1].capacity == std::numeric_limits<std::uint64_t>::max(),
+                   "capacidades inteiras nos dois extremos");
+             check(network.dependencies.size() == 3 &&
+                       network.dependencies[0].before == 0 && network.dependencies[0].after == 1 &&
+                       network.dependencies[1].before == 1 && network.dependencies[1].after == 0 &&
+                       network.dependencies[2].before == 1 && network.dependencies[2].after == 1,
+                   "ciclo e autodependência são preservados para análise posterior");
+             const auto empty = parseMissionNetwork(R"({"vertices":[],"routes":[],
+                 "infrastructure":[],"transfers":[],"activities":[],"dependencies":[]})",
+                 catalog);
+             check(empty.vertices.empty() && empty.dependencies.empty(), "rede vazia");
+         }});
+    tests.push_back(
+        {"rede espacial entradas inválidas e duplicatas", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto valid = nlohmann::json::parse(R"({
+                 "vertices":["terre","lune"], "routes":[], "infrastructure":[], "transfers":[],
+                 "activities":[{"id":"a","name":"A","body":"terre"},
+                               {"id":"b","name":"B","body":"lune"}], "dependencies":[]
+             })");
+             const auto rejects = [&](const std::string& text, const char* expected) {
+                 try {
+                     parseMissionNetwork(text, catalog);
+                 } catch (const std::invalid_argument& error) {
+                     return std::string(error.what()).find(expected) != std::string::npos;
+                 }
+                 return false;
+             };
+             check(rejects("{", "JSON do cenário inválido") && rejects("[]", "objeto JSON") &&
+                       rejects("{}", "campo ausente: vertices"),
+                   "JSON malformado, tipo da raiz e campo obrigatório");
+             struct Case {
+                 const char* section;
+                 const char* value;
+                 const char* error;
+             };
+             const Case cases[] = {
+                 {"vertices", "{}", "deve ser uma lista"},
+                 {"vertices", R"([""])", "texto preenchido"},
+                 {"vertices", R"(["Terre"])", "ID ausente no catálogo"},
+                 {"vertices", R"(["terre","terre"])", "vértice duplicado"},
+                 {"routes", R"([1])", "esperado um objeto"},
+                 {"routes", R"([{"from":"terre","to":"mars","cost":1}])", "ID fora do cenário"},
+                 {"routes", R"([{"from":"terre","to":"lune"}])", "campo ausente: cost"},
+                 {"routes", R"([{"from":"terre","to":"lune","cost":-1}])", "cost deve ser"},
+                 {"routes", R"([{"from":"terre","to":"lune","cost":"1"}])", "cost deve ser"},
+                 {"routes", R"([{"from":"terre","to":"lune","cost":1},
+                                {"from":"terre","to":"lune","cost":2}])", "relação duplicada"},
+                 {"infrastructure", R"([{"a":"terre","b":"lune","cost":1},
+                                         {"a":"lune","b":"terre","cost":2}])", "relação duplicada"},
+                 {"transfers", R"([{"from":"terre","to":"lune","capacity":-1}])", "capacity deve ser"},
+                 {"transfers", R"([{"from":"terre","to":"lune","capacity":0.5}])", "capacity deve ser"},
+                 {"transfers", R"([{"from":"terre","to":"lune","capacity":18446744073709551616}])",
+                  "capacity deve ser"},
+                 {"transfers", R"([{"from":"terre","to":"lune","capacity":1},
+                                   {"from":"terre","to":"lune","capacity":1}])", "relação duplicada"},
+                 {"activities", R"([{"id":"a","name":"A","body":"mars"}])", "ID fora do cenário"},
+                 {"activities", R"([{"id":"a","name":"A","body":"terre"},
+                                    {"id":"a","name":"B","body":"lune"}])", "atividade duplicada"},
+                 {"dependencies", R"([{"before":"a","after":"terre"}])", "ID fora do cenário"},
+                 {"dependencies", R"([{"before":"a","after":"b"},
+                                      {"before":"a","after":"b"}])", "relação duplicada"},
+             };
+             for (const auto& test : cases) {
+                 auto invalid = valid;
+                 invalid[test.section] = nlohmann::json::parse(test.value);
+                 check(rejects(invalid.dump(), test.error), test.value);
+             }
+             const auto tooLarge = R"({"vertices":["terre","lune"],
+                 "routes":[{"from":"terre","to":"lune","cost":1e400}],
+                 "infrastructure":[],"transfers":[],"activities":[],"dependencies":[]})";
+             check(rejects(tooLarge, "JSON do cenário inválido"), "custo acima da faixa finita");
+         }});
+    tests.push_back(
+        {"menu rede espacial e recuperação de falha", [] {
+             BodyCatalog catalog;
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             const std::string fixture = FIXTURE_PATH;
+             std::istringstream input(
+                 "11\n2\n11\n1\n" + scenario + "\n1\n2\n" + fixture +
+                 "\n11\n1\n" + scenario + "\n11\n1\n" + scenario + "/inexistente" +
+                 "\n1\n2\n" + fixture + "\n11\n2\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto loaded = text.find("Rede carregada: 3 vértices.");
+             check(text.find("Nenhum cenário de rede carregado.") < loaded &&
+                       text.find("ID ausente no catálogo: terre") < loaded,
+                   "visualização sem cenário e carga antes do catálogo");
+             const auto failed = text.find("Não foi possível abrir o cenário", loaded);
+             check(failed != std::string::npos &&
+                       text.find("Vértices (3)\n  terre | Earth", failed) != std::string::npos &&
+                       text.find("Rede descartada") == std::string::npos,
+                   "rede anterior sobrevive à falha e à recarga com os mesmos IDs");
+             check(text.find("Deslocamentos (4)\n  terre -> lune | custo 2") != std::string::npos &&
+                       text.find("Infraestrutura (3)\n  terre -- lune | custo 3") != std::string::npos &&
+                       text.find("Transferências (3)\n  terre -> lune | capacidade 5") != std::string::npos &&
+                       text.find("relay | Instalar o retransmissor @ lune") != std::string::npos &&
+                       text.find("Dependências (2)\n  prepare -> relay") != std::string::npos &&
+                       text.find("Encerrado.") != std::string::npos,
+                   "menu mostra cada relação, seus dados e seu sentido");
          }});
     int failures = 0;
     for (const auto& t : tests) {

@@ -1,13 +1,16 @@
 #pragma once
 #include "BodyCatalog.hpp"
+#include "MissionNetwork.hpp"
 #include "SolarApiClient.hpp"
 #include <iosfwd>
+#include <optional>
 namespace cronicas {
 class TerminalUI {
     BodyCatalog& catalog_;
     const SolarApiClient& api_;
     std::istream& input_;
     std::ostream& output_;
+    std::optional<MissionNetwork> network_;
     std::string read(const std::string& prompt);
     double number(const std::string& prompt);
     size_t integer(const std::string& prompt, size_t maximum);
@@ -17,6 +20,8 @@ class TerminalUI {
     void load();
     void compare();
     void plan(bool dynamic);
+    void networkMenu();
+    void showNetwork(const MissionNetwork& network);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,

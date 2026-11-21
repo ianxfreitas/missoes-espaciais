@@ -1,0 +1,28 @@
+{
+  "vertices": ["terre", "lune", "mars"],
+  "routes": [
+    {"from": "terre", "to": "lune", "cost": 2},
+    {"from": "lune", "to": "mars", "cost": 4},
+    {"from": "terre", "to": "mars", "cost": 8},
+    {"from": "mars", "to": "terre", "cost": 9}
+  ],
+  "infrastructure": [
+    {"a": "terre", "b": "lune", "cost": 3},
+    {"a": "lune", "b": "mars", "cost": 5},
+    {"a": "terre", "b": "mars", "cost": 7}
+  ],
+  "transfers": [
+    {"from": "terre", "to": "lune", "capacity": 5},
+    {"from": "lune", "to": "mars", "capacity": 4},
+    {"from": "terre", "to": "mars", "capacity": 2}
+  ],
+  "activities": [
+    {"id": "prepare", "name": "Preparar a missão", "body": "terre"},
+    {"id": "relay", "name": "Instalar o retransmissor", "body": "lune"},
+    {"id": "survey", "name": "Iniciar o levantamento", "body": "mars"}
+  ],
+  "dependencies": [
+    {"before": "prepare", "after": "relay"},
+    {"before": "relay", "after": "survey"}
+  ]
+}
