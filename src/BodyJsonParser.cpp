@@ -29,7 +29,7 @@ ParseResult parseBodies(const std::string& text) {
         b.id = record["id"].get<std::string>();
         auto stringField = [&](const char* name) {
             if (!record.contains(name) || record[name].is_null())
-                return std::string{};
+                return std::string{}; 
             if (record[name].is_string())
                 return record[name].get<std::string>();
             result.warnings.push_back(prefix + name + " inválido");

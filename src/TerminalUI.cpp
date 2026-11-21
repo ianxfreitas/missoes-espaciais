@@ -153,6 +153,7 @@ void TerminalUI::run() {
             switch (option) {
                 case 1:
                     load();
+                    
                     break;
                 case 2: {
                     auto body = catalog_.find(read("ID exato: "));

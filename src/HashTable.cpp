@@ -43,7 +43,7 @@ HashTable& HashTable::operator=(HashTable&& other) noexcept {
         rehashes_ = std::exchange(other.rehashes_, 0);
     }
     return *this;
-}
+}   
 
 std::uint64_t HashTable::hashKey(const std::string& key) noexcept {
     std::uint64_t value = 14695981039346656037ULL;

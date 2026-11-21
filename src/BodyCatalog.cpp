@@ -27,10 +27,11 @@ LoadSummary BodyCatalog::load(const ParseResult& parsed,
     }
     std::string newSource = source;
     table_ = std::move(replacement);
-    source_.swap(newSource);
+    source_.swap(newSource);    
     return summary;
 }
 std::vector<const CelestialBody*> BodyCatalog::select(
+
     const std::function<bool(const CelestialBody&)>& predicate) const {
     auto elements = table_.elements();
     elements.erase(std::remove_if(elements.begin(), elements.end(),
