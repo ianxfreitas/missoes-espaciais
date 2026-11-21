@@ -168,8 +168,8 @@ void TerminalUI::plan(bool dynamic) {
 void TerminalUI::networkMenu() {
     const auto mode = integer(
         "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento, "
-        "4 ordenar atividades, 5 planejar infraestrutura: ",
-        5);
+        "4 ordenar atividades, 5 planejar infraestrutura, 6 calcular transferência máxima: ",
+        6);
     if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
@@ -183,8 +183,10 @@ void TerminalUI::networkMenu() {
         planRoute(*network_);
     } else if (mode == 4) {
         showActivityOrder(*network_);
-    } else {
+    } else if (mode == 5) {
         showInfrastructurePlan(*network_);
+    } else {
+        showMaximumTransfer(*network_);
     }
 }
 void TerminalUI::planRoute(const MissionNetwork& network) {
@@ -244,6 +246,35 @@ void TerminalUI::showInfrastructurePlan(const MissionNetwork& network) {
                 << network.vertices[link.second] << " | custo " << link.cost << '\n';
     }
     output_ << "Custo total da infraestrutura: " << plan.totalCost << '\n';
+}
+void TerminalUI::showMaximumTransfer(const MissionNetwork& network) {
+    const auto origin = read("ID da origem: ");
+    const auto destination = read("ID do destino: ");
+    const auto plan = maximumTransfer(network, origin, destination);
+    output_ << "Fluxo máximo: " << plan.totalFlow << '\n';
+    if (!plan.cutChannels) {
+        output_ << "Origem e destino coincidem. A transferência é trivial.\n";
+        return;
+    }
+    if (plan.totalFlow == 0) {
+        output_ << "Não há fluxo possível entre os pontos informados.\n";
+    } else {
+        output_ << "Canais utilizados\n";
+        for (std::size_t i = 0; i < plan.channelFlows.size(); ++i) {
+            if (plan.channelFlows[i] == 0) continue;
+            const auto& channel = network.transfers[i];
+            output_ << "  " << network.vertices[channel.from] << " -> "
+                    << network.vertices[channel.to] << " | fluxo " << plan.channelFlows[i]
+                    << " / capacidade " << channel.capacity << '\n';
+        }
+    }
+    output_ << "Corte mínimo (capacidade total: " << plan.totalFlow << ")\n";
+    if (plan.cutChannels->empty()) output_ << "  Nenhum canal atravessa o corte.\n";
+    for (auto index : *plan.cutChannels) {
+        const auto& channel = network.transfers[index];
+        output_ << "  " << network.vertices[channel.from] << " -> "
+                << network.vertices[channel.to] << " | capacidade " << channel.capacity << '\n';
+    }
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

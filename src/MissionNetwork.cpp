@@ -5,6 +5,7 @@
 #include <cmath>
 #include <fstream>
 #include <functional>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <queue>
@@ -17,6 +18,14 @@ namespace cronicas {
 namespace {
 using nlohmann::json;
 using Positions = std::map<std::string, std::size_t>;
+
+std::size_t vertexIndex(const MissionNetwork& network, const std::string& id,
+                        const char* role) {
+    const auto it = std::find(network.vertices.begin(), network.vertices.end(), id);
+    if (it == network.vertices.end())
+        throw std::invalid_argument(std::string("ID de ") + role + " fora do cenário: " + id);
+    return static_cast<std::size_t>(it - network.vertices.begin());
+}
 
 const json& field(const json& object, const char* name) {
     if (!object.is_object()) throw std::invalid_argument("esperado um objeto");
@@ -123,14 +132,8 @@ class DisjointSets {
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
                                              const std::string& origin,
                                              const std::string& destination) {
-    const auto vertexIndex = [&](const std::string& id, const char* role) {
-        const auto it = std::find(network.vertices.begin(), network.vertices.end(), id);
-        if (it == network.vertices.end())
-            throw std::invalid_argument(std::string("ID de ") + role + " fora do cenário: " + id);
-        return static_cast<std::size_t>(it - network.vertices.begin());
-    };
-    const auto source = vertexIndex(origin, "origem");
-    const auto target = vertexIndex(destination, "destino");
+    const auto source = vertexIndex(network, origin, "origem");
+    const auto target = vertexIndex(network, destination, "destino");
     const auto vertexCount = network.vertices.size();
 
     // A lista de adjacência referencia as rotas da rede existente.
@@ -240,6 +243,82 @@ InfrastructurePlan planInfrastructure(const MissionNetwork& network) {
     }
     if (!std::isfinite(plan.totalCost))
         throw std::overflow_error("Custo total da infraestrutura fora da faixa numérica");
+    return plan;
+}
+
+TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& origin,
+                             const std::string& destination) {
+    const auto source = vertexIndex(network, origin, "origem");
+    const auto target = vertexIndex(network, destination, "destino");
+    const auto count = network.vertices.size();
+    TransferPlan plan;
+    plan.channelFlows.resize(network.transfers.size(), 0);
+
+    struct ResidualEdge {
+        std::size_t to, reverse;
+        std::uint64_t capacity;
+    };
+    std::vector<ResidualEdge> residual;
+    residual.reserve(2 * network.transfers.size());
+    std::vector<std::vector<std::size_t>> outgoing(count);
+    for (const auto& channel : network.transfers) {
+        if (channel.from >= count || channel.to >= count)
+            throw std::invalid_argument("Canal de transferência com extremidade fora do cenário");
+        const auto forward = residual.size();
+        const auto reverse = forward + 1;
+        residual.push_back({channel.to, reverse, channel.capacity});
+        residual.push_back({channel.from, forward, 0});
+        outgoing[channel.from].push_back(forward);
+        outgoing[channel.to].push_back(reverse);
+    }
+    if (source == target) return plan;
+
+    std::vector<bool> reached(count, false);
+    std::vector<std::size_t> previousEdge(count);
+    std::vector<std::size_t> queue;
+    queue.reserve(count);
+    while (true) {
+        for (auto vertex : queue) reached[vertex] = false;
+        queue.clear();
+        queue.push_back(source);
+        reached[source] = true;
+        for (std::size_t next = 0; next < queue.size() && !reached[target]; ++next) {
+            for (auto index : outgoing[queue[next]]) {
+                const auto& edge = residual[index];
+                if (edge.capacity == 0 || reached[edge.to]) continue;
+                reached[edge.to] = true;
+                previousEdge[edge.to] = index;
+                queue.push_back(edge.to);
+            }
+        }
+        if (!reached[target]) break;
+
+        auto amount = std::numeric_limits<std::uint64_t>::max();
+        for (auto vertex = target; vertex != source;) {
+            const auto& edge = residual[previousEdge[vertex]];
+            amount = std::min(amount, edge.capacity);
+            vertex = residual[edge.reverse].to;
+        }
+        if (amount > std::numeric_limits<std::uint64_t>::max() - plan.totalFlow)
+            throw std::overflow_error("Fluxo máximo excede a faixa de 64 bits");
+        for (auto vertex = target; vertex != source;) {
+            auto& edge = residual[previousEdge[vertex]];
+            auto& reverse = residual[edge.reverse];
+            // A soma das capacidades residuais do par permanece igual à original.
+            edge.capacity -= amount;
+            reverse.capacity += amount;
+            vertex = reverse.to;
+        }
+        plan.totalFlow += amount;
+    }
+
+    auto& cut = plan.cutChannels.emplace();
+    for (std::size_t i = 0; i < network.transfers.size(); ++i) {
+        const auto& channel = network.transfers[i];
+        // Cada canal ocupa duas posições, com a aresta reversa em segundo lugar.
+        plan.channelFlows[i] = residual[2 * i + 1].capacity;
+        if (reached[channel.from] && !reached[channel.to]) cut.push_back(i);
+    }
     return plan;
 }
 

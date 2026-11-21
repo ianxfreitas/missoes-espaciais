@@ -54,6 +54,13 @@ struct InfrastructurePlan {
     std::size_t componentCount = 0;
 };
 
+struct TransferPlan {
+    std::uint64_t totalFlow = 0;
+    std::vector<std::uint64_t> channelFlows;  // Um fluxo por posição em transfers.
+    // Posições dos canais que cruzam o corte. Ausente se origem e destino coincidem.
+    std::optional<std::vector<std::size_t>> cutChannels;
+};
+
 // Retorna nullopt para um destino inalcançável. IDs fora do cenário são inválidos.
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
                                              const std::string& origin,
@@ -65,6 +72,9 @@ std::optional<std::vector<std::size_t>> orderActivities(const MissionNetwork& ne
 
 // Retorna uma floresta mínima. Um único componente indica uma árvore completa.
 InfrastructurePlan planInfrastructure(const MissionNetwork& network);
+
+TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& origin,
+                             const std::string& destination);
 
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);

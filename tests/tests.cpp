@@ -22,6 +22,52 @@ using namespace cronicas;
 void check(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
+
+void checkTransferFlow(const MissionNetwork& network, const TransferPlan& plan,
+                       std::size_t source, std::size_t target) {
+    const auto count = network.vertices.size();
+    check(plan.channelFlows.size() == network.transfers.size(), "um fluxo por canal");
+    std::vector<std::uint64_t> incoming(count, 0), outgoing(count, 0);
+    for (std::size_t i = 0; i < network.transfers.size(); ++i) {
+        const auto& channel = network.transfers[i];
+        const auto flow = plan.channelFlows[i];
+        check(flow <= channel.capacity, "fluxo respeita a capacidade do canal");
+        incoming[channel.to] += flow;
+        outgoing[channel.from] += flow;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        if (i == source)
+            check(outgoing[i] >= incoming[i] && outgoing[i] - incoming[i] == plan.totalFlow,
+                  "fluxo líquido de saída da origem");
+        else if (i == target)
+            check(incoming[i] >= outgoing[i] && incoming[i] - outgoing[i] == plan.totalFlow,
+                  "fluxo líquido de entrada no destino");
+        else
+            check(incoming[i] == outgoing[i], "conservação nos vértices intermediários");
+    }
+
+    check(plan.cutChannels.has_value(), "origem e destino distintos têm corte mínimo");
+    std::vector<bool> cut(network.transfers.size(), false);
+    std::uint64_t cutCapacity = 0;
+    for (auto i : *plan.cutChannels) {
+        check(i < cut.size() && !cut[i], "índices válidos e distintos no corte");
+        cut[i] = true;
+        cutCapacity += network.transfers[i].capacity;
+    }
+    check(cutCapacity == plan.totalFlow, "capacidade do corte coincide com o fluxo máximo");
+
+    std::vector<bool> reached(count, false);
+    reached[source] = true;
+    for (std::size_t step = 0; step < count; ++step) {
+        for (std::size_t i = 0; i < network.transfers.size(); ++i) {
+            const auto& channel = network.transfers[i];
+            if (!cut[i] && channel.capacity > 0 && reached[channel.from])
+                reached[channel.to] = true;
+        }
+    }
+    check(!reached[target], "remover os canais do corte separa origem e destino");
+}
+
 int main() {
     std::vector<std::pair<std::string, std::function<void()>>> tests;
     tests.push_back({"modelo", [] {
@@ -1392,6 +1438,140 @@ int main() {
                        text.find("Ordem de execução das atividades\n  1. prepare", tree) !=
                            std::string::npos && text.find("Encerrado.") != std::string::npos,
                    "deslocamentos e ordenação de atividades continuam disponíveis");
+         }});
+    tests.push_back(
+        {"Edmonds–Karp caminho único e gargalo", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars"};
+             network.transfers = {{0, 1, 9}, {1, 2, 4}};
+             const auto plan = maximumTransfer(network, "terre", "mars");
+             check(plan.totalFlow == 4 && plan.channelFlows == std::vector<std::uint64_t>{4, 4} &&
+                       plan.cutChannels && *plan.cutChannels == std::vector<std::size_t>{1},
+                   "o menor canal limita o caminho e constitui o corte");
+             checkTransferFlow(network, plan, 0, 2);
+         }});
+    tests.push_back(
+        {"Edmonds–Karp caminhos múltiplos e corte mínimo", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             const auto plan = maximumTransfer(network, "terre", "mars");
+             check(plan.totalFlow == 6 &&
+                       plan.channelFlows == std::vector<std::uint64_t>{4, 4, 2} &&
+                       plan.cutChannels && *plan.cutChannels == std::vector<std::size_t>{1, 2},
+                   "o caminho pela Lua e o canal direto contribuem para o fluxo");
+             checkTransferFlow(network, plan, 0, 2);
+         }});
+    tests.push_back(
+        {"Edmonds–Karp reajuste reverso, canais opostos e ciclos", [] {
+             MissionNetwork network;
+             network.vertices = {"s", "a", "b", "c", "d", "t"};
+             // O primeiro caminho s-a-c-t só permite chegar a 2 desfazendo a-c.
+             network.transfers = {{0, 1, 1}, {0, 2, 1}, {1, 3, 1}, {1, 4, 1},
+                                  {2, 3, 1}, {3, 5, 1}, {4, 5, 1}};
+             const std::vector<std::uint64_t> rearranged{1, 1, 0, 1, 1, 1, 1};
+             const auto plan = maximumTransfer(network, "s", "t");
+             check(plan.totalFlow == 2 && plan.channelFlows == rearranged,
+                   "segundo caminho aumentante usa a reversa residual c-a");
+             checkTransferFlow(network, plan, 0, 5);
+
+             network.transfers.push_back({3, 1, 9});  // Canal real oposto a a-c.
+             network.transfers.push_back({3, 3, 7});
+             auto expected = rearranged;
+             expected.push_back(0);
+             expected.push_back(0);
+             const auto cyclic = maximumTransfer(network, "s", "t");
+             check(cyclic.totalFlow == 2 && cyclic.channelFlows == expected,
+                   "o canal real c-a e o laço permanecem distintos da reversa residual");
+             checkTransferFlow(network, cyclic, 0, 5);
+         }});
+    tests.push_back(
+        {"Edmonds–Karp fluxo zero, isolamento e pontos iguais", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "unknown"};
+             network.transfers = {{0, 1, 0}, {1, 2, 5}, {2, 1, 4}};
+             network.routes = {{0, 2, 0}, {3, 2, 0}};
+             network.infrastructure = {{0, 2, 1}, {2, 3, 1}};
+             const auto blocked = maximumTransfer(network, "terre", "mars");
+             check(blocked.totalFlow == 0 && blocked.cutChannels &&
+                       *blocked.cutChannels == std::vector<std::size_t>{0},
+                   "canal de capacidade zero bloqueia o fluxo apesar das outras relações");
+             checkTransferFlow(network, blocked, 0, 2);
+             const auto isolated = maximumTransfer(network, "unknown", "mars");
+             check(isolated.totalFlow == 0 && isolated.cutChannels && isolated.cutChannels->empty(),
+                   "origem isolada gera corte vazio e fluxo zero");
+             checkTransferFlow(network, isolated, 3, 2);
+             const auto same = maximumTransfer(network, "lune", "lune");
+             check(same.totalFlow == 0 && !same.cutChannels &&
+                       same.channelFlows == std::vector<std::uint64_t>{0, 0, 0},
+                   "pontos iguais geram transferência trivial sem corte");
+         }});
+    tests.push_back(
+        {"Edmonds–Karp entradas inválidas e limite numérico", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars"};
+             const auto rejects = [&](const char* origin, const char* destination) {
+                 try {
+                     maximumTransfer(network, origin, destination);
+                 } catch (const std::invalid_argument&) {
+                     return true;
+                 }
+                 return false;
+             };
+             check(rejects("Terre", "mars") && rejects("terre", "unknown"),
+                   "IDs exatos de origem e destino são obrigatórios");
+             network.transfers = {{0, 3, 1}};
+             check(rejects("terre", "mars"), "canal montado com extremidade inexistente");
+
+             const auto limit = std::numeric_limits<std::uint64_t>::max();
+             network.transfers = {{0, 2, limit}, {2, 0, limit}};
+             const auto plan = maximumTransfer(network, "terre", "mars");
+             check(plan.totalFlow == limit && plan.channelFlows == std::vector<std::uint64_t>{limit, 0},
+                   "maior capacidade de 64 bits com canal oposto independente");
+             checkTransferFlow(network, plan, 0, 2);
+             network.transfers.push_back({0, 1, 1});
+             network.transfers.push_back({1, 2, 1});
+             bool overflow = false;
+             try {
+                 maximumTransfer(network, "terre", "mars");
+             } catch (const std::overflow_error&) {
+                 overflow = true;
+             }
+             check(overflow, "soma acima da faixa de 64 bits gera erro explícito");
+         }});
+    tests.push_back(
+        {"menu transferência máxima e regressão da rede", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             std::istringstream input("11\n6\n11\n1\n" + scenario +
+                                      "\n11\n6\nterre\nmars\n11\n6\nmars\nterre\n"
+                                      "11\n6\nlune\nlune\n11\n3\nterre\nmars\n11\n4\n11\n5\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto flow = text.find("Fluxo máximo: 6\n");
+             check(text.find("Nenhum cenário de rede carregado.") < flow &&
+                       text.find("terre -> lune | fluxo 4 / capacidade 5\n"
+                                 "  lune -> mars | fluxo 4 / capacidade 4\n"
+                                 "  terre -> mars | fluxo 2 / capacidade 2", flow) != std::string::npos &&
+                       text.find("Corte mínimo (capacidade total: 6)\n"
+                                 "  lune -> mars | capacidade 4\n  terre -> mars | capacidade 2", flow) !=
+                           std::string::npos,
+                   "menu mostra o fluxo máximo, canais utilizados e corte mínimo");
+             check(text.find("Fluxo máximo: 0\nNão há fluxo possível", flow) != std::string::npos &&
+                       text.find("Fluxo máximo: 0\nOrigem e destino coincidem", flow) !=
+                           std::string::npos,
+                   "menu distingue ausência de transferência do caso trivial");
+             check(text.find("Percurso: terre -> lune -> mars\nCusto total: 6", flow) !=
+                       std::string::npos &&
+                       text.find("Ordem de execução das atividades\n  1. prepare", flow) !=
+                           std::string::npos &&
+                       text.find("Custo total da infraestrutura: 8", flow) != std::string::npos &&
+                       text.find("Encerrado.") != std::string::npos,
+                   "Dijkstra, Kahn e Kruskal continuam disponíveis");
          }});
     int failures = 0;
     for (const auto& t : tests) {

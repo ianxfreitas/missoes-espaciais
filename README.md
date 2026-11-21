@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento por ID de origem e destino, `4` para ordenar as atividades e `5` para planejar a infraestrutura.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento, `4` para ordenar as atividades, `5` para planejar a infraestrutura e `6` para calcular a transferência máxima.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -376,9 +376,21 @@ Com `V` vértices e `E` ligações de infraestrutura, o tempo é `O(V + E log(E 
 
 Para reproduzir no cenário de exemplo, carregue `scenarios/solar-network.json` e use `11 → 5`. As duas ligações selecionadas são `terre -- lune` (3) e `lune -- mars` (5), com custo total 8.
 
+### Transferência máxima com Edmonds–Karp
+
+`maximumTransfer` resolve os IDs da origem e do destino e usa os canais de `transfers`. Para cada canal, a consulta monta um par de arestas residuais temporárias. A direta começa com a capacidade do canal e indica quanto fluxo ainda pode ser enviado. A reversa começa em zero e indica quanto fluxo já enviado pode ser desfeito. Canais reais em sentidos opostos têm pares independentes.
+
+A BFS encontra um caminho aumentante com o menor número de arestas residuais. O algoritmo envia o mínimo das capacidades restantes do caminho. A atualização subtrai esse valor de cada aresta usada e soma à aresta oposta do mesmo par. Usar uma reversa reduz o fluxo do canal original, liberando capacidade para outra combinação de caminhos. O fluxo final de cada canal é a capacidade restante em sua reversa. O fluxo respeita a capacidade de cada canal e se conserva nos vértices intermediários.
+
+Quando uma BFS deixa de alcançar o destino, os vértices ainda alcançáveis pela origem definem um lado do corte mínimo. Os canais originais que saem desse lado para o outro compõem o corte, e a soma de suas capacidades coincide com o fluxo máximo. Origens e destinos distintos sem transferência possível têm fluxo zero e corte de capacidade zero. Origem igual ao destino tem fluxo zero e resultado sem corte. O total usa `uint64_t`. Se a soma ultrapassar a faixa, a consulta sinaliza o erro antes de somar.
+
+Para `V` vértices e `E` canais, a construção residual usa tempo e espaço `O(V + E)`. Cada BFS percorre até `O(E + 1)` elementos alcançáveis. Edmonds–Karp faz até `O(V E)` aumentos e a consulta tem tempo `O(V + E + V E²)` e memória auxiliar `O(V + E)`.
+
+No cenário de exemplo, `11 → 6` com origem `terre` e destino `mars` apresenta fluxo máximo 6. Quatro unidades seguem pela Lua e duas pelo canal direto. O corte mínimo contém `lune → mars` (capacidade 4) e `terre → mars` (capacidade 2).
+
 ## Testes e validação
 
-A suíte possui 42 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu. Os testes de Kahn verificam a ordem das atividades, pré-requisitos, ciclos e cenário sem atividades. Os testes de Kruskal conferem os custos mínimos de árvores e florestas, empates, ligações de custo zero, vértices isolados, entradas inválidas e o fluxo do submenu.
+A suíte possui 48 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem cenários válidos e inválidos, tipos de aresta, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra, Kahn e Kruskal verificam caminhos mínimos, ordens de atividades e conexões de custo mínimo. Os testes de Edmonds–Karp conferem gargalos, caminhos múltiplos, reajustes residuais, conservação, fluxo zero, limites numéricos e a igualdade entre fluxo máximo e capacidade do corte exibido no submenu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 
