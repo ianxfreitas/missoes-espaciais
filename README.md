@@ -1,6 +1,6 @@
 # Crônicas do Espaço — Planejamento Algorítmico de Missões
 
-Projeto da Parte 1 de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelotas (UFPel). O sistema consulta dados reais do Sistema Solar, organiza corpos celestes em uma Tabela Hash própria e executa uma heurística gulosa para selecionar destinos sob recursos limitados.
+Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelotas (UFPel). O sistema consulta dados reais do Sistema Solar, organiza corpos celestes em uma Tabela Hash própria, indexa nomes em uma Trie e executa uma heurística gulosa para selecionar destinos sob recursos limitados.
 
 ## Integrantes
 
@@ -9,7 +9,7 @@ Projeto da Parte 1 de Algoritmos e Estruturas de Dados II da Universidade Federa
 
 ## Escopo e fonte principal
 
-O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementa apenas a Hash; Trie e Árvore B têm interfaces abstratas para a Parte 2. A opção gulosa escolhida é A — Planejamento e Triagem de Missões. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
+O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 já incorpora a Trie para busca por nome. A Árvore B tem sua interface definida. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
 
 ## Ferramentas e instalação no Fedora
 
@@ -132,7 +132,8 @@ Massa é mantida em notação científica, sem expandir potências desnecessaria
 | `BodyJsonParser` | Validação e conversão JSON |
 | `HashTable` | Nós próprios, busca, inserção, atualização, memória e métricas |
 | `BodyCatalog` | Carga transacional, pesquisas e filtros |
-| `TrieIndex`, `BTreeIndex` | Interfaces abstratas da Parte 2 |
+| `TrieIndex` | Interface e implementação da Trie para nomes |
+| `BTreeIndex` | Interface da Árvore B |
 | `MissionPlanner` | Estimativas físicas e seleção gulosa |
 | `TerminalUI`, `main.cpp` | Menu, leitura e apresentação |
 | `tests/tests.cpp` | Suíte sem dependência de rede |
@@ -145,7 +146,7 @@ A libcurl é encapsulada por um contrato simples que permite substituir o transp
 
 O HTTP verifica TLS, limita a resposta a 16 MiB e utiliza timeouts de conexão de 10 s e total de 30 s. Redirecionamentos não são seguidos para evitar encaminhamento de credenciais a outro host. Erros de transporte, autenticação, limite de requisições, outros status e parsing são comunicados. Não há repetição automática nem substituição silenciosa por JSON local.
 
-A carga constrói uma Hash temporária e somente então substitui o catálogo atual. Falha de aquisição, parsing, alocação ou carga vazia preserva o catálogo anterior. Campos defeituosos opcionais permitem carga parcial com avisos; não há garantia de completude quando registros são rejeitados.
+A carga constrói uma Hash temporária e usa seus registros finais para montar a Trie. Com as duas estruturas prontas, substitui o catálogo atual. Falha de aquisição, parsing, alocação ou carga vazia preserva o catálogo anterior. Campos defeituosos opcionais permitem carga parcial com avisos; não há garantia de completude quando registros são rejeitados.
 
 Armazenamento local significa objetos na memória da aplicação após a aquisição, como permitido pelo enunciado. Não há cache persistente automático. A opção JSON local é explícita; consumo exclusivamente estático corresponde ao Nível 2 (70% da pontuação do módulo de aquisição), enquanto o GET durante a execução atende ao Nível 1.
 
@@ -221,7 +222,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 
 1. Carregar: API dinâmica ou arquivo JSON escolhido explicitamente.
 2. Consultar: ID exato, por exemplo `terre`, `mars` ou `lune`.
-3. Pesquisar: trecho do nome ou intervalo de gravity, meanRadius ou avgTemp.
+3. Pesquisar. O submenu oferece `1` para trecho do nome, `2` para intervalo de `gravity`, `meanRadius` ou `avgTemp`, `3` para nome exato e `4` para prefixo do nome.
 4. Listar: todos os corpos, ordenados por ID.
 5. Filtrar: tipo ou condição de planeta.
 6. Comparar: consultar dois IDs na Hash, mostrar características e diferenças físicas conhecidas.
@@ -231,13 +232,15 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
-## Interfaces para a Parte 2
+## Trie e interface da Árvore B
 
-`TrieIndex` define insert/erase da associação nome–ID, consulta exata, prefixo e quantidade de nós visitados na última busca. Deve aceitar vários IDs para um mesmo nome. A implementação futura deve documentar normalização de nomes e comportamento de métricas.
+`makeTrieIndex` cria uma implementação de `TrieIndex`. Cada aresta representa um byte do nome e cada nó que encerra um nome guarda os IDs associados. `insert` mantém IDs distintos para um mesmo nome e `erase` remove um par nome–ID, podando os nós que ficam sem IDs e filhos. O catálogo normaliza os nomes de exibição para minúsculas e resolve na Hash os IDs devolvidos pela Trie, em ordem por ID.
+
+A busca exata percorre o caminho do nome inteiro e devolve os IDs do nó final. A busca por prefixo percorre também a subárvore desse nó e devolve IDs únicos. O nome vazio na busca exata produz zero resultados. O prefixo vazio percorre todo o índice. A métrica exibida no menu conta a raiz e cada nó alcançado uma vez, inclusive em buscas sem resultado.
+
+Considerando IDs de tamanho limitado, `L` bytes no nome ou prefixo, `A` IDs no nó final, `S` nós na subárvore e `K` associações coletadas, inserção e remoção custam `O(L + log(A + 1))`. Cada nó tem até 256 filhos. A busca exata custa `O(L + A)`. A busca por prefixo custa `O(L + S + K log(K + 1))`, incluindo a ordenação para deduplicar os IDs.
 
 `BTreeIndex` define insert/erase da associação valor–ID, consulta exata, intervalo inclusivo, altura e splits. A chave ordenada futura será `(valor, ID)` para preservar corpos com valores físicos iguais. Valores não finitos devem ser rejeitados. Altura e convenção para árvore vazia devem ser documentadas na Parte 2.
-
-Ambas são classes abstratas com destrutor virtual, sem nós ou implementação nesta etapa. Resultados são IDs, resolvidos pela Hash do catálogo. Na Parte 2, os índices devem ser construídos e atualizados junto do catálogo; a UI continuará sem conhecer sua representação interna. Trie poderá acelerar prefixos, e Árvore B consultas físicas por intervalo.
 
 ## Planejamento guloso — Opção A
 
@@ -299,7 +302,7 @@ Com orçamento 10 e limite 2, a heurística seleciona A, sobra 4 e o benefício 
 
 ## Testes e validação
 
-A suíte possui 12 grupos internos e verifica modelo, JSON inválido, ausência, zero, tipos incorretos, HTTP simulado, autenticação, falhas de rede, inserção, busca, duplicatas, colisões controladas, fator de carga, rehashing, integridade de 1.004 elementos, transferência de propriedade, pesquisas, filtros, recarga transacional, interfaces abstratas, fórmulas, restrições, desempates, contraexemplo e menu com fluxos locais e EOF.
+A suíte possui 16 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. O teste de menu exercita os quatro modos de pesquisa.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

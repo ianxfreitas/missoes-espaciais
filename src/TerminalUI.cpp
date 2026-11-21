@@ -164,8 +164,10 @@ void TerminalUI::run() {
                     break;
                 }
                 case 3: {
-                    auto mode =
-                        integer("Pesquisa: 1 nome, 2 intervalo físico: ", 2);
+                    auto mode = integer(
+                        "Pesquisa: 1 trecho do nome, 2 intervalo físico, "
+                        "3 nome exato, 4 prefixo do nome: ",
+                        4);
                     if (mode == 1)
                         showList(catalog_.searchName(read("Trecho do nome: ")));
                     else if (mode == 2) {
@@ -174,6 +176,14 @@ void TerminalUI::run() {
                         auto min = number("Mínimo: ");
                         auto max = number("Máximo: ");
                         showList(catalog_.filterRange(field, min, max));
+                    } else if (mode == 3 || mode == 4) {
+                        const bool exact = mode == 3;
+                        const auto text =
+                            read(exact ? "Nome exato: " : "Prefixo do nome: ");
+                        showList(exact ? catalog_.searchNameExact(text)
+                                       : catalog_.searchNamePrefix(text));
+                        output_ << "Nós visitados na Trie: "
+                                << catalog_.lastNameSearchVisitedNodes() << '\n';
                     } else
                         throw std::invalid_argument("Pesquisa inválida");
                     break;

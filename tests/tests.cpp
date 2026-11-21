@@ -229,6 +229,132 @@ int main() {
                              std::has_virtual_destructor_v<TrieIndex> &&
                              std::has_virtual_destructor_v<BTreeIndex>);
                      }});
+    tests.push_back({"trie inserção, busca e prefixos", [] {
+                         auto trie = makeTrieIndex();
+                         trie->insert("Mar", "z");
+                         trie->insert("Mars", "b");
+                         trie->insert("Mars", "a");
+                         trie->insert("Mars", "a");
+                         trie->insert("Marsupial", "a");
+                         trie->insert("Moon", "moon");
+                         check(trie->exact("Mars") ==
+                                   std::vector<std::string>{"a", "b"},
+                               "IDs distintos para o mesmo nome e par idempotente");
+                         check(trie->lastVisitedNodes() == 5, "raiz e quatro letras");
+                         check(trie->exact("Ma").empty(), "nó sem ID próprio");
+                         check(trie->prefix("Mar") ==
+                                   std::vector<std::string>{"a", "b", "z"},
+                               "inclui o próprio prefixo e deduplica IDs");
+                         check(trie->lastVisitedNodes() == 10,
+                               "caminho e subárvore contados uma vez");
+                         check(trie->prefix("Max").empty() &&
+                                   trie->lastVisitedNodes() == 3,
+                               "prefixo ausente conta até o último nó encontrado");
+                         check(trie->exact("mars").empty(), "chaves em bytes");
+                     }});
+    tests.push_back({"trie remoção de pares e poda", [] {
+                         auto trie = makeTrieIndex();
+                         trie->insert("Mar", "root");
+                         trie->insert("Mars", "a");
+                         trie->insert("Mars", "b");
+                         trie->insert("Moon", "moon");
+                         check(!trie->erase("Mars", "missing") &&
+                                   !trie->erase("Unknown", "a"),
+                               "remoção de associação ausente");
+                         check(trie->erase("Mar", "root") &&
+                                   trie->exact("Mar").empty(),
+                               "remove o nome intermediário");
+                         check(trie->erase("Mars", "a") &&
+                                   trie->exact("Mars") == std::vector<std::string>{"b"},
+                               "preserva outro ID no nome e o ramo descendente");
+                         check(trie->erase("Mars", "b") &&
+                                   trie->lastVisitedNodes() == 5,
+                               "remoção preserva a métrica da última busca");
+                         check(trie->prefix("Mar").empty() &&
+                                   trie->lastVisitedNodes() == 2,
+                               "poda o ramo vazio até a bifurcação");
+                         check(trie->exact("Moon") == std::vector<std::string>{"moon"},
+                               "preserva outro ramo");
+                         trie->insert("Mars", "a");
+                         check(trie->exact("Mars") == std::vector<std::string>{"a"},
+                               "reinserção após a poda");
+                     }});
+    tests.push_back({"trie entradas vazias", [] {
+                         auto trie = makeTrieIndex();
+                         check(trie->lastVisitedNodes() == 0, "métrica inicial");
+                         check(trie->exact("").empty() && trie->lastVisitedNodes() == 1,
+                               "busca exata vazia visita a raiz sem encontrar IDs");
+                         check(trie->prefix("").empty(), "prefixo vazio em trie vazia");
+                         for (auto name : {"", "Mars"}) {
+                             auto id = *name ? "" : "mars";
+                             bool threw = false;
+                             try {
+                                 trie->insert(name, id);
+                             } catch (const std::invalid_argument&) {
+                                 threw = true;
+                             }
+                             check(threw && !trie->erase(name, id),
+                                   "nome ou ID vazio");
+                         }
+                         check(trie->prefix("").empty() && trie->lastVisitedNodes() == 1,
+                               "inserção inválida não cria nós");
+                         trie->insert("Car", "car");
+                         trie->insert("Cat", "cat");
+                         check(trie->lastVisitedNodes() == 1,
+                               "inserção preserva a métrica da última busca");
+                         check(trie->prefix("") == std::vector<std::string>{"car", "cat"} &&
+                                   trie->lastVisitedNodes() == 5,
+                               "prefixo vazio visita a trie toda");
+                     }});
+    tests.push_back(
+        {"catálogo com trie e recarga", [] {
+             BodyCatalog c;
+             check(c.searchNameExact("Earth").empty() &&
+                       c.searchNamePrefix("").empty() &&
+                       c.lastNameSearchVisitedNodes() == 0,
+                   "catálogo antes da primeira carga");
+             auto parsed = parseBodies(R"({"bodies":[
+                 {"id":"terre","englishName":"Terra antiga"},
+                 {"id":"clone","englishName":"eArTh"},
+                 {"id":"terre","englishName":"Earth"},
+                 {"id":"mars"}
+             ]})");
+             auto summary = c.load(parsed, "original");
+             check(summary.inserted == 3 && summary.updated == 1,
+                   "carga com atualização de ID");
+             const std::vector<const CelestialBody*> earth{c.find("clone"),
+                                                           c.find("terre")};
+             check(earth[0] && earth[1] && c.searchNameExact("eARtH") == earth &&
+                       c.lastNameSearchVisitedNodes() == 6,
+                   "busca exata normalizada retorna registros da Hash por ID");
+             check(c.searchNamePrefix("EA") == earth && c.searchName("art") == earth,
+                   "prefixo e trecho continuam disponíveis");
+             check(c.searchNameExact("Terra antiga").empty() &&
+                       c.searchNamePrefix("Ter").empty(),
+                   "nome anterior do ID atualizado fica fora do índice");
+             const std::vector<const CelestialBody*> mars{c.find("mars")};
+             check(mars.front() && c.searchNameExact("MARS") == mars,
+                   "nome de exibição usa ID quando englishName está ausente");
+             auto replacement = parseBodies(
+                 R"({"bodies":[{"id":"venus","englishName":"Venus"}]})");
+             auto invalid = replacement;
+             invalid.bodies.emplace_back();
+             bool threw = false;
+             try {
+                 c.load(invalid, "falha");
+             } catch (const std::invalid_argument&) {
+                 threw = true;
+             }
+             check(threw && c.source() == "original" &&
+                       c.searchNamePrefix("ea") == earth &&
+                       !c.find("venus") && c.searchNameExact("Venus").empty(),
+                   "falha durante a carga preserva Hash, Trie e origem");
+             c.load(replacement, "recarga");
+             const std::vector<const CelestialBody*> venus{c.find("venus")};
+             check(c.source() == "recarga" && c.searchNamePrefix("ea").empty() &&
+                       venus.front() && c.searchNamePrefix("Ve") == venus,
+                   "recarga troca os registros e o índice");
+         }});
     tests.push_back(
         {"guloso e contraexemplo", [] {
              std::vector<MissionCandidate> c = {
@@ -309,12 +435,22 @@ int main() {
              } http;
              SolarApiClient api(http);
              std::istringstream input(
-                 "bad\n2\nmars\n3\n1\nEAR\n3\n2\ngravity\n1\n4\n4\n5\n1\nMoon\n5\n2\n1\n6\nterre\nmars\n7\n8\n100\n2\n1\n2\n/arquivo/inexistente\n9\n");
+                 "bad\n2\nmars\n3\n1\nart\n3\n2\ngravity\n1\n4\n"
+                 "3\n3\neArTh\n3\n4\nMo\n"
+                 "4\n5\n1\nMoon\n5\n2\n1\n6\nterre\nmars\n7\n8\n100\n2\n1\n2\n/arquivo/inexistente\n9\n");
              std::ostringstream output;
              TerminalUI(c, api, input, output).run();
              auto text = output.str();
              check(text.find("Erro:") != std::string::npos, "entrada inválida");
              check(text.find("Mars") != std::string::npos, "consulta");
+             check(text.find("Trecho do nome: terre | Earth | Planet\nResultados: 1") !=
+                       std::string::npos, "busca por trecho interno");
+             check(text.find("Nome exato: terre | Earth | Planet\nResultados: 1\n"
+                             "Nós visitados na Trie: 6") != std::string::npos,
+                   "busca exata no menu");
+             check(text.find("Prefixo do nome: lune | Moon | Moon\nResultados: 1\n"
+                             "Nós visitados na Trie: 5") != std::string::npos,
+                   "busca por prefixo no menu");
              check(text.find("Diferença gravidade") != std::string::npos,
                    "comparação");
              check(text.find("Colisões de inserção") != std::string::npos,

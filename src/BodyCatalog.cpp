@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 namespace cronicas {
 namespace {
 std::string lower(std::string text) {
@@ -25,9 +26,14 @@ LoadSummary BodyCatalog::load(const ParseResult& parsed,
         else
             ++summary.updated;
     }
+    auto nameIndex = makeTrieIndex();
+    for (const auto* body : replacement.elements())
+        nameIndex->insert(lower(displayName(*body)), body->id);
+
     std::string newSource = source;
     table_ = std::move(replacement);
-    source_.swap(newSource);    
+    nameIndex_ = std::move(nameIndex);
+    source_.swap(newSource);
     return summary;
 }
 std::vector<const CelestialBody*> BodyCatalog::select(
@@ -50,6 +56,25 @@ std::vector<const CelestialBody*> BodyCatalog::searchName(
     return select([&](const auto& b) {
         return lower(displayName(b)).find(needle) != std::string::npos;
     });
+}
+std::vector<const CelestialBody*> BodyCatalog::resolveIds(
+    const std::vector<std::string>& ids) const {
+    std::vector<const CelestialBody*> bodies;
+    bodies.reserve(ids.size());
+    for (const auto& id : ids) {
+        if (const auto* body = find(id)) bodies.push_back(body);
+    }
+    return bodies;
+}
+std::vector<const CelestialBody*> BodyCatalog::searchNameExact(
+    const std::string& text) const {
+    if (!nameIndex_) return {};
+    return resolveIds(nameIndex_->exact(lower(text)));
+}
+std::vector<const CelestialBody*> BodyCatalog::searchNamePrefix(
+    const std::string& text) const {
+    if (!nameIndex_) return {};
+    return resolveIds(nameIndex_->prefix(lower(text)));
 }
 std::vector<const CelestialBody*> BodyCatalog::filterType(
     const std::string& type) const {
