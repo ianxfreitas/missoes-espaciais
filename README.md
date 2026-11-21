@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON e `2` para visualizar os vértices, as ligações e as atividades.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede e `3` para planejar um deslocamento por ID de origem e destino.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -346,9 +346,19 @@ Na raiz do repositório, execute `./build/missoes --json tests/fixtures/bodies.j
 
 Para `V` corpos, `A` atividades e `E` relações totais, o cenário ocupa `O(V + A + E)`. Os mapas e conjuntos temporários usados para resolver IDs e checar duplicatas têm o mesmo limite de espaço. Percorrer a representação ou construir listas de adjacência a partir dela custa `O(V + A + E)`.
 
+### Planejamento de deslocamentos com Dijkstra
+
+`shortestTravelPath` resolve os IDs exatos da origem e do destino e monta uma lista de adjacência temporária que referencia somente as arestas direcionadas de `routes`. O algoritmo começa com custo zero na origem. Uma fila de prioridade escolhe o vértice com o menor custo conhecido. Para cada rota que sai dele, a soma do custo atual com o custo da aresta é comparada ao melhor valor já registrado para o vizinho. Uma melhora atualiza esse valor e grava o predecessor. A fila descarta entradas cujo custo já foi melhorado.
+
+Como os custos são não negativos, o destino pode ser considerado definitivo quando sai da fila com seu menor custo. O percurso é reconstruído do destino para a origem pelos predecessores e invertido para exibição. Uma alternativa de mesmo custo preserva o predecessor registrado, inclusive em ciclos de custo zero. Um ID fora do cenário gera erro. Se a fila esvaziar com o destino ainda sem predecessor, o destino é inalcançável. Se origem e destino coincidirem, o percurso contém apenas esse vértice e custa zero. Os custos acumulados usam `long double`, com erro explícito se o menor custo exceder a faixa numérica.
+
+Depois de carregar o cenário de exemplo, `11 → 2` mostra o arco direto `terre -> mars` de custo `8`. Em `11 → 3`, informe `terre` e `mars` para obter `terre -> lune -> mars`, de custo `6`.
+
+Com `V` vértices e `R` rotas, a construção do índice de adjacência custa `O(V + R)`. Como cada melhora pode inserir uma nova entrada na fila, o tempo total é `O(V + R log(R + 1))` e o espaço auxiliar é `O(V + R)`. No cenário, existe no máximo uma rota por par ordenado de vértices, então o tempo também pode ser expresso como `O(V + R log(V + 1))`.
+
 ## Testes e validação
 
-A suíte possui 30 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu.
+A suíte possui 34 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

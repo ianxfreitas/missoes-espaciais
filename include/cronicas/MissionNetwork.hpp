@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,16 @@ struct MissionNetwork {
     std::vector<MissionActivity> activities;
     std::vector<ActivityDependency> dependencies;
 };
+
+struct TravelPlan {
+    std::vector<std::string> path;
+    long double totalCost;
+};
+
+// Retorna nullopt para um destino inalcançável. IDs fora do cenário são inválidos.
+std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
+                                             const std::string& origin,
+                                             const std::string& destination);
 
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);

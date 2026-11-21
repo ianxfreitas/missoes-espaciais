@@ -166,19 +166,37 @@ void TerminalUI::plan(bool dynamic) {
     output_ << "A heurística não garante o ótimo global.\n";
 }
 void TerminalUI::networkMenu() {
-    const auto mode = integer("Rede espacial: 1 carregar cenário, 2 visualizar: ", 2);
+    const auto mode = integer(
+        "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento: ", 3);
+    if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
         network_ = readMissionNetwork(path, catalog_);
         output_ << "Rede carregada: " << network_->vertices.size() << " vértices.\n";
+    } else if (!network_) {
+        output_ << "Nenhum cenário de rede carregado.\n";
     } else if (mode == 2) {
-        if (network_)
-            showNetwork(*network_);
-        else
-            output_ << "Nenhum cenário de rede carregado.\n";
+        showNetwork(*network_);
     } else {
-        throw std::invalid_argument("Opção de rede inválida");
+        planRoute(*network_);
     }
+}
+void TerminalUI::planRoute(const MissionNetwork& network) {
+    const auto origin = read("ID da origem: ");
+    const auto destination = read("ID do destino: ");
+    const auto plan = shortestTravelPath(network, origin, destination);
+    if (!plan) {
+        output_ << "Destino inalcançável: não há rota de " << origin << " até "
+                << destination << ".\n";
+        return;
+    }
+
+    output_ << "Percurso: ";
+    for (size_t i = 0; i < plan->path.size(); ++i) {
+        if (i > 0) output_ << " -> ";
+        output_ << plan->path[i];
+    }
+    output_ << "\nCusto total: " << plan->totalCost << '\n';
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

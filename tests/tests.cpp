@@ -1090,6 +1090,124 @@ int main() {
                        text.find("Encerrado.") != std::string::npos,
                    "menu mostra cada relação, seus dados e seu sentido");
          }});
+    tests.push_back(
+        {"Dijkstra caminho direto e alternativa mais barata", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             const auto direct = shortestTravelPath(network, "lune", "mars");
+             check(direct && direct->path == std::vector<std::string>{"lune", "mars"} &&
+                       direct->totalCost == 4,
+                   "a melhor rota pode ser uma aresta direta");
+             check(std::any_of(network.routes.begin(), network.routes.end(),
+                               [&](const auto& route) {
+                                   return network.vertices[route.from] == "terre" &&
+                                          network.vertices[route.to] == "mars" &&
+                                          route.cost == 8;
+                               }),
+                   "cenário tem rota direta Terra–Marte com custo 8");
+             const auto indirect = shortestTravelPath(network, "terre", "mars");
+             check(indirect && indirect->path == std::vector<std::string>{"terre", "lune", "mars"} &&
+                       indirect->totalCost == 6,
+                   "rota intermediária reduz o custo de 8 para 6");
+             const auto reverse = shortestTravelPath(network, "mars", "terre");
+             check(reverse && reverse->path == std::vector<std::string>{"mars", "terre"} &&
+                       reverse->totalCost == 9,
+                   "sentido inverso tem o custo do arco correspondente");
+         }});
+    tests.push_back(
+        {"Dijkstra custos zero, ciclos, empates e destino inalcançável", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "unknown"};
+             network.routes = {{0, 1, 0}, {1, 0, 0}, {1, 1, 0}, {1, 2, 0}, {0, 2, 3}};
+             network.infrastructure = {{0, 3, 0}, {2, 1, 0}};
+             network.transfers = {{0, 3, 100}, {2, 0, 100}};
+
+             const auto costless = shortestTravelPath(network, "terre", "mars");
+             check(costless && costless->path == std::vector<std::string>{"terre", "lune", "mars"} &&
+                       costless->totalCost == 0,
+                   "ciclo e laço de custo zero não entram no percurso");
+             check(!shortestTravelPath(network, "terre", "unknown") &&
+                       !shortestTravelPath(network, "unknown", "terre") &&
+                       !shortestTravelPath(network, "mars", "terre"),
+                   "isolados e sentidos ausentes ficam inalcançáveis mesmo em outras relações");
+             const auto same = shortestTravelPath(network, "unknown", "unknown");
+             check(same && same->path == std::vector<std::string>{"unknown"} &&
+                       same->totalCost == 0,
+                   "origem e destino iguais mesmo em vértice isolado");
+
+             network.routes.back().cost = 0;
+             const auto tie = shortestTravelPath(network, "terre", "mars");
+             check(tie && tie->path == std::vector<std::string>{"terre", "mars"} &&
+                       tie->totalCost == 0,
+                   "custo igual mantém o predecessor que já foi registrado");
+         }});
+    tests.push_back(
+        {"Dijkstra validação e custos acumulados grandes", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars"};
+             const auto rejects = [&](const auto& origin, const auto& destination,
+                                      const char* message) {
+                 try {
+                     shortestTravelPath(network, origin, destination);
+                 } catch (const std::invalid_argument& error) {
+                     return std::string(error.what()).find(message) != std::string::npos;
+                 }
+                 return false;
+             };
+             check(rejects("", "mars", "origem") && rejects("Terre", "mars", "origem") &&
+                       rejects("terre", "unknown", "destino") &&
+                       rejects("unknown", "unknown", "origem"),
+                   "IDs precisam existir no cenário, inclusive quando são iguais");
+             network.routes = {{0, 3, 0}};
+             check(rejects("terre", "mars", "extremidade fora do cenário"),
+                   "valida índices em redes montadas em memória");
+             for (double cost : {-1.0, std::numeric_limits<double>::infinity(),
+                                 std::numeric_limits<double>::quiet_NaN()}) {
+                 network.routes = {{0, 2, cost}};
+                 check(rejects("terre", "mars", "Custo da rota"),
+                       "valida custos em redes montadas em memória");
+             }
+
+             const auto large = std::numeric_limits<double>::max();
+             network.routes = {{0, 1, large}, {1, 2, large}};
+             if (std::numeric_limits<long double>::max_exponent >
+                 std::numeric_limits<double>::max_exponent) {
+                 const auto plan = shortestTravelPath(network, "terre", "mars");
+                 check(plan && plan->totalCost == static_cast<long double>(large) * 2,
+                       "custo acumulado pode exceder a faixa de double");
+             } else {
+                 bool overflow = false;
+                 try {
+                     shortestTravelPath(network, "terre", "mars");
+                 } catch (const std::overflow_error&) {
+                     overflow = true;
+                 }
+                 check(overflow, "percurso existe, mas o custo excede a faixa numérica");
+             }
+         }});
+    tests.push_back(
+        {"menu planejamento de deslocamentos", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             std::istringstream input("11\n3\n11\n1\n" + scenario +
+                                      "\n11\n2\n11\n3\nterre\nmars\n"
+                                      "11\n3\nlune\nlune\n11\n3\nterre\nunknown\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             check(text.find("Nenhum cenário de rede carregado.") != std::string::npos &&
+                       text.find("terre -> mars | custo 8") != std::string::npos &&
+                       text.find("Percurso: terre -> lune -> mars\nCusto total: 6") != std::string::npos,
+                   "menu exibe a aresta direta e o resultado de Dijkstra");
+             check(text.find("Percurso: lune\nCusto total: 0") != std::string::npos &&
+                       text.find("Erro: ID de destino fora do cenário: unknown") != std::string::npos &&
+                       text.find("Encerrado.") != std::string::npos,
+                   "percurso trivial e retorno ao menu após ID inválido");
+         }});
     int failures = 0;
     for (const auto& t : tests) {
         try {

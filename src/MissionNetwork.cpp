@@ -1,9 +1,12 @@
 #include "cronicas/MissionNetwork.hpp"
 #include "cronicas/BodyCatalog.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <functional>
 #include <map>
+#include <queue>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -84,6 +87,67 @@ void readRelations(const json& root, const char* section, const Positions& posit
     });
 }
 }  // namespace
+
+std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
+                                             const std::string& origin,
+                                             const std::string& destination) {
+    const auto vertexIndex = [&](const std::string& id, const char* role) {
+        const auto it = std::find(network.vertices.begin(), network.vertices.end(), id);
+        if (it == network.vertices.end())
+            throw std::invalid_argument(std::string("ID de ") + role + " fora do cenário: " + id);
+        return static_cast<std::size_t>(it - network.vertices.begin());
+    };
+    const auto source = vertexIndex(origin, "origem");
+    const auto target = vertexIndex(destination, "destino");
+    const auto vertexCount = network.vertices.size();
+
+    // A lista de adjacência referencia as rotas da rede existente.
+    std::vector<std::vector<const TravelRoute*>> outgoing(vertexCount);
+    for (const auto& route : network.routes) {
+        if (route.from >= vertexCount || route.to >= vertexCount)
+            throw std::invalid_argument("Rota com extremidade fora do cenário");
+        if (!std::isfinite(route.cost) || route.cost < 0)
+            throw std::invalid_argument("Custo da rota deve ser finito e não negativo");
+        outgoing[route.from].push_back(&route);
+    }
+
+    using QueueEntry = std::pair<long double, std::size_t>;
+    std::priority_queue<QueueEntry, std::vector<QueueEntry>,
+                        std::greater<QueueEntry>> pending;
+    std::vector<long double> cost(vertexCount);
+    std::vector<std::size_t> previous(vertexCount, vertexCount);
+    previous[source] = source;
+    pending.emplace(0, source);
+
+    while (!pending.empty()) {
+        const auto [currentCost, from] = pending.top();
+        pending.pop();
+        if (currentCost != cost[from]) continue;  // Entrada anterior a uma melhora.
+        if (from == target) break;
+
+        for (const auto* route : outgoing[from]) {
+            const auto to = route->to;
+            const auto nextCost = currentCost + route->cost;
+            // Uma alternativa de mesmo custo preserva o predecessor, inclusive
+            // em ciclos de custo zero.
+            if (previous[to] != vertexCount && nextCost >= cost[to]) continue;
+            cost[to] = nextCost;
+            previous[to] = from;
+            pending.emplace(nextCost, to);
+        }
+    }
+
+    if (previous[target] == vertexCount) return std::nullopt;
+    if (!std::isfinite(cost[target]))
+        throw std::overflow_error("Custo mínimo fora da faixa numérica");
+
+    TravelPlan plan{{}, cost[target]};
+    for (auto step = target; step != source; step = previous[step])
+        plan.path.push_back(network.vertices[step]);
+    plan.path.push_back(network.vertices[source]);
+    std::reverse(plan.path.begin(), plan.path.end());
+    return plan;
+}
 
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog) {

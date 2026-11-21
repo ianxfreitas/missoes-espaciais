@@ -22,6 +22,7 @@ class TerminalUI {
     void plan(bool dynamic);
     void networkMenu();
     void showNetwork(const MissionNetwork& network);
+    void planRoute(const MissionNetwork& network);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,
