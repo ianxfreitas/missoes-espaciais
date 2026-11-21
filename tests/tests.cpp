@@ -1693,6 +1693,159 @@ int main() {
                        text.find("Encerrado.") != std::string::npos,
                    "Dijkstra, Kahn, Kruskal e Edmonds–Karp continuam disponíveis");
          }});
+    tests.push_back(
+        {"Kosaraju cenários de um grupo e de vários grupos", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto solar = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             auto one = stronglyConnectedRouteComponents(solar);
+             check(one.size() == 1, "todos os vértices do cenário original estão no mesmo grupo");
+             std::sort(one.front().begin(), one.front().end());
+             check(one.front() == std::vector<std::size_t>{0, 1, 2}, "grupo inclui os três corpos");
+
+             const auto network = readMissionNetwork(NETWORK_MULTI_GROUP_SCENARIO_PATH, catalog);
+             auto groups = stronglyConnectedRouteComponents(network);
+             for (auto& group : groups) std::sort(group.begin(), group.end());
+             std::sort(groups.begin(), groups.end());
+             check(groups == std::vector<std::vector<std::size_t>>{{0, 1}, {2}} &&
+                       analyzeRoutes(network).weakComponents.size() == 1,
+                   "uma rota de mão única liga dois grupos fortes no mesmo componente fraco");
+             check(shortestTravelPath(network, "terre", "mars").has_value() &&
+                       !shortestTravelPath(network, "mars", "terre"),
+                   "Marte é alcançável a partir da Terra, mas o retorno está ausente");
+         }});
+    tests.push_back(
+        {"Kosaraju DAG, redes desconexas e isolados", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "venus", "mercure", "unknown"};
+             network.routes = {{0, 1, 1}, {1, 2, 1}, {0, 2, 1}, {3, 4, 1}};
+             network.infrastructure = {{2, 3, 1}, {4, 5, 1}};
+             network.transfers = {{2, 0, 4}, {0, 5, 4}, {5, 0, 4}};
+             network.activities = {{"a", "A", 2}, {"b", "B", 0}};
+             network.dependencies = {{0, 1}, {1, 0}};
+
+             auto groups = stronglyConnectedRouteComponents(network);
+             std::sort(groups.begin(), groups.end());
+             check(groups == std::vector<std::vector<std::size_t>>{{0}, {1}, {2}, {3}, {4}, {5}},
+                   "DAG produz grupos unitários, inclusive o isolado e outras relações");
+
+             network.routes = {{0, 1, 1}, {1, 0, 1}, {2, 3, 1}, {3, 2, 1}};
+             groups = stronglyConnectedRouteComponents(network);
+             for (auto& group : groups) std::sort(group.begin(), group.end());
+             std::sort(groups.begin(), groups.end());
+             check(groups == std::vector<std::vector<std::size_t>>{{0, 1}, {2, 3}, {4}, {5}},
+                   "regiões desconexas separam grupos multivértice e isolados");
+         }});
+    tests.push_back(
+        {"Kosaraju rede vazia, vértice único e entrada inválida", [] {
+             MissionNetwork network;
+             check(stronglyConnectedRouteComponents(network).empty(), "rede vazia sem componentes");
+             network.vertices = {"terre"};
+             const std::vector<std::vector<std::size_t>> singleton{{0}};
+             check(stronglyConnectedRouteComponents(network) == singleton,
+                   "um único vértice forma grupo mesmo sem laço");
+             network.routes = {{0, 0, 0}};
+             check(stronglyConnectedRouteComponents(network) == singleton,
+                   "laço preserva o grupo unitário");
+             network.routes = {{0, 1, 0}};
+             bool rejected = false;
+             try {
+                 stronglyConnectedRouteComponents(network);
+             } catch (const std::invalid_argument&) {
+                 rejected = true;
+             }
+             check(rejected, "índice inválido em rota construída em memória");
+         }});
+    tests.push_back(
+        {"Kosaraju comparado com alcançabilidade mútua em 512 grafos", [] {
+             constexpr std::size_t count = 3;
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars"};
+             for (std::size_t mask = 0; mask < (std::size_t{1} << (count * count)); ++mask) {
+                 network.routes.clear();
+                 bool reachable[count][count]{};
+                 for (std::size_t from = 0; from < count; ++from) {
+                     reachable[from][from] = true;
+                     for (std::size_t to = 0; to < count; ++to) {
+                         if (!(mask & (std::size_t{1} << (from * count + to)))) continue;
+                         network.routes.push_back({from, to, 0});
+                         reachable[from][to] = true;
+                     }
+                 }
+                 for (std::size_t via = 0; via < count; ++via)
+                     for (std::size_t from = 0; from < count; ++from)
+                         for (std::size_t to = 0; to < count; ++to)
+                             reachable[from][to] |= reachable[from][via] && reachable[via][to];
+
+                 const auto groups = stronglyConnectedRouteComponents(network);
+                 std::vector<std::size_t> component(count, count);
+                 for (std::size_t group = 0; group < groups.size(); ++group) {
+                     check(!groups[group].empty(), "cada grupo contém ao menos um vértice");
+                     for (auto vertex : groups[group]) {
+                         check(vertex < count && component[vertex] == count,
+                               "sem índices inválidos ou repetidos na partição");
+                         component[vertex] = group;
+                     }
+                 }
+                 for (std::size_t from = 0; from < count; ++from) {
+                     check(component[from] != count, "todos os vértices aparecem na partição");
+                     for (std::size_t to = 0; to < count; ++to)
+                         check((component[from] == component[to]) ==
+                                   (reachable[from][to] && reachable[to][from]),
+                               "mesmo grupo se e somente se houver alcançabilidade mútua");
+                 }
+             }
+         }});
+    tests.push_back(
+        {"menu Kosaraju com dois cenários e regressão da rede", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string solar = NETWORK_SCENARIO_PATH;
+             const std::string multiple = NETWORK_MULTI_GROUP_SCENARIO_PATH;
+             std::istringstream input("11\n8\n11\n1\n" + solar +
+                                      "\n11\n8\n11\n3\nterre\nmars\n11\n4\n11\n5\n"
+                                      "11\n6\nterre\nmars\n11\n7\n11\n1\n" + multiple +
+                                      "\n11\n8\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto one = text.find("Componentes fortemente conectados pelas rotas (1)\n");
+             const auto two = text.find("Componentes fortemente conectados pelas rotas (2)\n");
+             check(text.find("Nenhum cenário de rede carregado.") < one &&
+                       one < two && two != std::string::npos,
+                   "menu permite carregar e analisar os dois cenários");
+             const auto original = text.substr(one, text.find("\n1 Carregar dados", one) - one);
+             const auto containsPair = [](const std::string& group) {
+                 return group.find("terre | Earth") != std::string::npos &&
+                        group.find("lune | Moon") != std::string::npos;
+             };
+             const auto containsMars = [](const std::string& group) {
+                 return group.find("mars | Mars") != std::string::npos;
+             };
+             check(containsPair(original) && containsMars(original), "grupo único apresenta IDs e nomes");
+             const auto first = text.find("  Grupo 1\n", two);
+             const auto second = text.find("  Grupo 2\n", first);
+             check(first < second && second != std::string::npos, "menu imprime dois grupos distintos");
+             const auto group1 = text.substr(first, second - first);
+             const auto group2 = text.substr(second, text.find("\n1 Carregar dados", second) - second);
+             check((containsPair(group1) && !containsMars(group1) && containsMars(group2) &&
+                    !containsPair(group2)) ||
+                       (containsPair(group2) && !containsMars(group2) && containsMars(group1) &&
+                        !containsPair(group1)),
+                   "menu apresenta Terra e Lua juntas e Marte em um grupo próprio");
+             const auto earlier = text.substr(one, two - one);
+             check(earlier.find("Percurso: terre -> lune -> mars\nCusto total: 6") !=
+                       std::string::npos &&
+                       earlier.find("Ordem de execução das atividades\n  1. prepare") !=
+                           std::string::npos &&
+                       earlier.find("Custo total da infraestrutura: 8") != std::string::npos &&
+                       earlier.find("Fluxo máximo: 6") != std::string::npos &&
+                       earlier.find("Ciclo direcionado: terre -> lune -> mars -> terre") !=
+                           std::string::npos && text.find("Encerrado.") != std::string::npos,
+                   "comandos de rede anteriores seguem disponíveis");
+         }});
     int failures = 0;
     for (const auto& t : tests) {
         try {

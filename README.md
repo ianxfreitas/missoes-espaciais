@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento, `4` para ordenar as atividades, `5` para planejar a infraestrutura, `6` para calcular a transferência máxima e `7` para analisar as rotas.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento, `4` para ordenar as atividades, `5` para planejar a infraestrutura, `6` para calcular a transferência máxima, `7` para analisar as rotas e `8` para encontrar os grupos com Kosaraju.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -398,9 +398,24 @@ Um ciclo oferece um circuito de retorno compatível com o sentido das rotas, por
 
 O tempo e a memória auxiliar são `O(V + R)` para `V` vértices e `R` rotas. Use `11 → 7` depois de carregar `scenarios/solar-network.json`. O cenário mostra o ciclo `terre → lune → mars → terre`, um componente fraco e zero isolados.
 
+### Opção A — Kosaraju
+
+A funcionalidade adicional escolhida para a Parte 2 é a **Opção A da Seção 6**, análise de componentes fortemente conectados com Kosaraju. Cada grupo é um conjunto máximo de corpos que se alcançam mutuamente por caminhos direcionados. A análise usa somente a existência e o sentido das rotas de deslocamento. Os custos de viagem, as ligações de infraestrutura, os canais de transferência e as dependências são tratados em suas respectivas operações.
+
+`stronglyConnectedRouteComponents` faz duas passagens de DFS com pilhas explícitas. A primeira segue as saídas das rotas originais e registra cada vértice ao finalizar sua exploração. A segunda começa pelo último vértice finalizado e percorre as rotas de entrada como saídas do grafo transposto. Cada nova DFS nessa ordem encontra um componente completo. As duas passagens referenciam as rotas existentes pelo mesmo índice temporário de incidência. Um isolado forma um grupo próprio, assim como um vértice que só tem ligações de mão única com outros grupos. Uma rede vazia retorna zero grupos.
+
+Para `V` vértices e `R` rotas, o tempo e o espaço auxiliar são `O(V + R)`. Cada passagem visita os vértices e percorre uma quantidade linear de incidências. O resultado ajuda a identificar regiões com possibilidade de ida e volta. Para calcular o custo dos trajetos entre dois corpos do grupo, use Dijkstra em cada sentido.
+
+Execute `./build/missoes --json tests/fixtures/bodies.json`. Em `11 → 1`, carregue um dos arquivos abaixo. Use `11 → 8` para listar os IDs e nomes em cada grupo.
+
+| Arquivo | Grupos esperados |
+|---|---|
+| `scenarios/solar-network.json` | Um grupo com Terra (`terre`), Lua (`lune`) e Marte (`mars`) |
+| `scenarios/solar-network-multiple-groups.json` | Um grupo com Terra e Lua e um grupo com Marte. A rota Lua → Marte permite a ida, e o cenário só tem rotas de retorno entre Terra e Lua. |
+
 ## Testes e validação
 
-A suíte possui 53 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem cenários válidos e inválidos, tipos de aresta, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra, Kahn e Kruskal verificam caminhos mínimos, ordens de atividades e conexões de custo mínimo. Os testes de Edmonds–Karp conferem gargalos, reajustes residuais, conservação e a igualdade entre fluxo máximo e capacidade do corte. Os testes de análise das rotas verificam ciclos e laços, redes acíclicas ou desconexas, isolamento, mão única, casos-limite e regressão do submenu.
+A suíte possui 58 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie e da Árvore B verificam operações de consulta e remoção, entradas inválidas e integração com o catálogo. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva. Os testes da rede cobrem o carregamento de cenários, caminhos mínimos, ordens de atividades, árvores e florestas de custo mínimo, fluxo máximo e corte mínimo, ciclos e componentes fracos. Os testes de Kosaraju cobrem os dois cenários de demonstração, grafos acíclicos e desconexos, vértices isolados, casos-limite, regressão pelo menu e comparação com alcançabilidade mútua em todos os 512 grafos dirigidos de três vértices, incluindo laços.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

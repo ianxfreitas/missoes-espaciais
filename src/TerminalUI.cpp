@@ -169,8 +169,8 @@ void TerminalUI::networkMenu() {
     const auto mode = integer(
         "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento, "
         "4 ordenar atividades, 5 planejar infraestrutura, 6 calcular transferência máxima, "
-        "7 analisar rotas: ",
-        7);
+        "7 analisar rotas, 8 agrupar rotas com Kosaraju: ",
+        8);
     if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
@@ -188,8 +188,10 @@ void TerminalUI::networkMenu() {
         showInfrastructurePlan(*network_);
     } else if (mode == 6) {
         showMaximumTransfer(*network_);
-    } else {
+    } else if (mode == 7) {
         showRouteAnalysis(*network_);
+    } else {
+        showStrongRouteComponents(*network_);
     }
 }
 void TerminalUI::planRoute(const MissionNetwork& network) {
@@ -302,6 +304,19 @@ void TerminalUI::showRouteAnalysis(const MissionNetwork& network) {
     }
     output_ << "Vértices isolados (" << analysis.isolatedVertices.size() << ")\n";
     for (auto vertex : analysis.isolatedVertices) output_ << "  " << network.vertices[vertex] << '\n';
+}
+void TerminalUI::showStrongRouteComponents(const MissionNetwork& network) {
+    const auto components = stronglyConnectedRouteComponents(network);
+    output_ << "Componentes fortemente conectados pelas rotas (" << components.size() << ")\n";
+    for (std::size_t i = 0; i < components.size(); ++i) {
+        output_ << "  Grupo " << i + 1 << '\n';
+        for (auto vertex : components[i]) {
+            const auto& id = network.vertices[vertex];
+            output_ << "    " << id;
+            if (const auto* body = catalog_.find(id)) output_ << " | " << displayName(*body);
+            output_ << '\n';
+        }
+    }
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

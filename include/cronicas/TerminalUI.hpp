@@ -27,6 +27,7 @@ class TerminalUI {
     void showInfrastructurePlan(const MissionNetwork& network);
     void showMaximumTransfer(const MissionNetwork& network);
     void showRouteAnalysis(const MissionNetwork& network);
+    void showStrongRouteComponents(const MissionNetwork& network);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,

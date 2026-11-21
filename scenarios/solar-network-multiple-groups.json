@@ -1,0 +1,12 @@
+{
+  "vertices": ["terre", "lune", "mars"],
+  "routes": [
+    {"from": "terre", "to": "lune", "cost": 2},
+    {"from": "lune", "to": "terre", "cost": 3},
+    {"from": "lune", "to": "mars", "cost": 4}
+  ],
+  "infrastructure": [],
+  "transfers": [],
+  "activities": [],
+  "dependencies": []
+}

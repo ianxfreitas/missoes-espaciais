@@ -86,6 +86,10 @@ TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& o
 // Analisa apenas routes. Componentes fracos ignoram o sentido das rotas.
 RouteAnalysis analyzeRoutes(const MissionNetwork& network);
 
+// Grupos de índices em vertices, obtidos apenas das rotas de deslocamento.
+std::vector<std::vector<std::size_t>> stronglyConnectedRouteComponents(
+    const MissionNetwork& network);
+
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);
 MissionNetwork readMissionNetwork(const std::string& path,

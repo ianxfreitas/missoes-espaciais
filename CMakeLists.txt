@@ -24,4 +24,5 @@ add_test(NAME cronicas_tests COMMAND cronicas_tests)
 
 target_compile_definitions(cronicas_tests PRIVATE
   FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/bodies.json"
-  NETWORK_SCENARIO_PATH="${CMAKE_CURRENT_SOURCE_DIR}/scenarios/solar-network.json")
+  NETWORK_SCENARIO_PATH="${CMAKE_CURRENT_SOURCE_DIR}/scenarios/solar-network.json"
+  NETWORK_MULTI_GROUP_SCENARIO_PATH="${CMAKE_CURRENT_SOURCE_DIR}/scenarios/solar-network-multiple-groups.json")

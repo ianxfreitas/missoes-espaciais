@@ -130,15 +130,27 @@ class DisjointSets {
 
 using IncidentRoutes = std::vector<std::vector<const TravelRoute*>>;
 
+IncidentRoutes indexIncidentRoutes(const MissionNetwork& network) {
+    IncidentRoutes incident(network.vertices.size());
+    for (const auto& route : network.routes) {
+        if (route.from >= incident.size() || route.to >= incident.size())
+            throw std::invalid_argument("Rota com extremidade fora do cenário");
+        incident[route.from].push_back(&route);
+        if (route.from != route.to) incident[route.to].push_back(&route);
+    }
+    return incident;
+}
+
+struct RouteDfsFrame {
+    std::size_t vertex;
+    std::size_t nextRoute = 0;
+};
+
 std::vector<std::size_t> findRouteCycle(const IncidentRoutes& incident) {
     enum class Visit { unseen, active, finished };
-    struct Frame {
-        std::size_t vertex;
-        std::size_t nextRoute = 0;
-    };
 
     std::vector<Visit> state(incident.size(), Visit::unseen);
-    std::vector<Frame> stack;
+    std::vector<RouteDfsFrame> stack;
     for (std::size_t start = 0; start < incident.size(); ++start) {
         if (state[start] != Visit::unseen) continue;
         state[start] = Visit::active;
@@ -367,20 +379,12 @@ TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& o
 }
 
 RouteAnalysis analyzeRoutes(const MissionNetwork& network) {
-    const auto count = network.vertices.size();
-    // O índice temporário referencia as mesmas rotas pelos dois extremos.
-    IncidentRoutes incident(count);
-    for (const auto& route : network.routes) {
-        if (route.from >= count || route.to >= count)
-            throw std::invalid_argument("Rota com extremidade fora do cenário");
-        incident[route.from].push_back(&route);
-        if (route.from != route.to) incident[route.to].push_back(&route);
-    }
+    const auto incident = indexIncidentRoutes(network);
 
     RouteAnalysis analysis;
     analysis.cycle = findRouteCycle(incident);
-    std::vector<bool> reached(count, false);
-    for (std::size_t start = 0; start < count; ++start) {
+    std::vector<bool> reached(incident.size(), false);
+    for (std::size_t start = 0; start < incident.size(); ++start) {
         if (incident[start].empty()) analysis.isolatedVertices.push_back(start);
         if (reached[start]) continue;
 
@@ -399,6 +403,57 @@ RouteAnalysis analyzeRoutes(const MissionNetwork& network) {
         }
     }
     return analysis;
+}
+
+std::vector<std::vector<std::size_t>> stronglyConnectedRouteComponents(
+    const MissionNetwork& network) {
+    const auto incident = indexIncidentRoutes(network);
+    std::vector<bool> seen(incident.size(), false);
+    std::vector<std::size_t> finished;
+    finished.reserve(incident.size());
+    std::vector<RouteDfsFrame> stack;
+
+    // Primeira DFS. Registra cada vértice ao terminar de explorar suas saídas.
+    for (std::size_t start = 0; start < incident.size(); ++start) {
+        if (seen[start]) continue;
+        seen[start] = true;
+        stack.push_back({start});
+        while (!stack.empty()) {
+            auto& frame = stack.back();
+            const auto vertex = frame.vertex;
+            if (frame.nextRoute == incident[vertex].size()) {
+                finished.push_back(vertex);
+                stack.pop_back();
+                continue;
+            }
+            const auto* route = incident[vertex][frame.nextRoute++];
+            if (route->from != vertex || seen[route->to]) continue;
+            seen[route->to] = true;
+            stack.push_back({route->to});
+        }
+    }
+
+    std::fill(seen.begin(), seen.end(), false);
+    std::vector<std::vector<std::size_t>> components;
+    std::vector<std::size_t> pending;
+    for (auto start = finished.rbegin(); start != finished.rend(); ++start) {
+        if (seen[*start]) continue;
+        auto& component = components.emplace_back();
+        seen[*start] = true;
+        pending.push_back(*start);
+        while (!pending.empty()) {
+            const auto vertex = pending.back();
+            pending.pop_back();
+            component.push_back(vertex);
+            // No transposto, cada rota de entrada vira uma saída.
+            for (const auto* route : incident[vertex]) {
+                if (route->to != vertex || seen[route->from]) continue;
+                seen[route->from] = true;
+                pending.push_back(route->from);
+            }
+        }
+    }
+    return components;
 }
 
 MissionNetwork parseMissionNetwork(const std::string& text,
