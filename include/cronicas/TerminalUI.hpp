@@ -26,6 +26,7 @@ class TerminalUI {
     void showActivityOrder(const MissionNetwork& network);
     void showInfrastructurePlan(const MissionNetwork& network);
     void showMaximumTransfer(const MissionNetwork& network);
+    void showRouteAnalysis(const MissionNetwork& network);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,

@@ -68,6 +68,24 @@ void checkTransferFlow(const MissionNetwork& network, const TransferPlan& plan,
     check(!reached[target], "remover os canais do corte separa origem e destino");
 }
 
+void checkDirectedRouteCycle(const MissionNetwork& network,
+                             const std::vector<std::size_t>& cycle,
+                             std::size_t length) {
+    check(cycle.size() == length + 1 && cycle.front() == cycle.back(),
+          "ciclo fecha no vértice inicial e tem a extensão esperada");
+    std::vector<bool> seen(network.vertices.size(), false);
+    for (std::size_t i = 0; i < length; ++i) {
+        const auto from = cycle[i];
+        const auto to = cycle[i + 1];
+        check(from < seen.size() && !seen[from], "vértices internos do ciclo são distintos");
+        seen[from] = true;
+        check(std::any_of(network.routes.begin(), network.routes.end(), [&](const auto& route) {
+                  return route.from == from && route.to == to;
+              }),
+              "cada passo do ciclo segue uma rota existente no sentido correto");
+    }
+}
+
 int main() {
     std::vector<std::pair<std::string, std::function<void()>>> tests;
     tests.push_back({"modelo", [] {
@@ -1572,6 +1590,108 @@ int main() {
                        text.find("Custo total da infraestrutura: 8", flow) != std::string::npos &&
                        text.find("Encerrado.") != std::string::npos,
                    "Dijkstra, Kahn e Kruskal continuam disponíveis");
+         }});
+    tests.push_back(
+        {"análise de rotas ciclo direcionado de três vértices", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             const auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             const auto analysis = analyzeRoutes(network);
+             checkDirectedRouteCycle(network, analysis.cycle, 3);
+             check(analysis.weakComponents.size() == 1 &&
+                       analysis.weakComponents.front().size() == 3 &&
+                       analysis.isolatedVertices.empty(),
+                   "cenário de exemplo tem um componente e nenhum isolado");
+         }});
+    tests.push_back(
+        {"análise de rotas acíclicas, desconexas e de mão única", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "venus", "mercure", "unknown"};
+             network.routes = {{1, 0, 1}, {1, 2, 1}, {2, 0, 1}, {3, 4, 1}};
+             network.infrastructure = {{2, 3, 1}, {4, 5, 1}};
+             network.transfers = {{5, 0, 1}, {0, 5, 1}};
+             network.activities = {{"a", "A", 0}};
+             network.dependencies = {{0, 0}};
+             auto analysis = analyzeRoutes(network);
+             check(analysis.cycle.empty(),
+                   "rotas que chegam a um vértice finalizado não formam ciclo dirigido");
+             for (auto& component : analysis.weakComponents)
+                 std::sort(component.begin(), component.end());
+             std::sort(analysis.weakComponents.begin(), analysis.weakComponents.end());
+             check(analysis.weakComponents ==
+                       std::vector<std::vector<std::size_t>>{{0, 1, 2}, {3, 4}, {5}} &&
+                       analysis.isolatedVertices == std::vector<std::size_t>{5},
+                   "componentes e isolamento usam apenas a incidência das rotas");
+             check(shortestTravelPath(network, "lune", "terre").has_value() &&
+                       !shortestTravelPath(network, "terre", "lune"),
+                   "o mesmo componente fraco pode ter ida sem volta");
+         }});
+    tests.push_back(
+        {"análise de rotas ciclo maior em outro componente", [] {
+             MissionNetwork network;
+             network.vertices = {"terre", "lune", "mars", "venus", "europa", "io", "mercure"};
+             network.routes = {{0, 1, 1}, {2, 3, 1}, {3, 4, 1}, {4, 5, 1},
+                               {5, 6, 1}, {6, 3, 1}};
+             const auto analysis = analyzeRoutes(network);
+             checkDirectedRouteCycle(network, analysis.cycle, 4);
+             check(std::find(analysis.cycle.begin(), analysis.cycle.end(), 2) ==
+                       analysis.cycle.end() && analysis.weakComponents.size() == 2,
+                   "o caminho de entrada no ciclo fica fora do resultado");
+         }});
+    tests.push_back(
+        {"análise de rotas cenário vazio, vértice único e laço", [] {
+             MissionNetwork network;
+             const auto empty = analyzeRoutes(network);
+             check(empty.cycle.empty() && empty.weakComponents.empty() && empty.isolatedVertices.empty(),
+                   "rede vazia sem ciclos, componentes ou isolados");
+             network.vertices = {"terre"};
+             const auto single = analyzeRoutes(network);
+             check(single.cycle.empty() &&
+                       single.weakComponents == std::vector<std::vector<std::size_t>>{{0}} &&
+                       single.isolatedVertices == std::vector<std::size_t>{0},
+                   "vértice sem rotas é isolado e forma seu próprio componente");
+             network.routes = {{0, 0, 0}};
+             const auto loop = analyzeRoutes(network);
+             checkDirectedRouteCycle(network, loop.cycle, 1);
+             check(loop.isolatedVertices.empty() && loop.weakComponents == single.weakComponents,
+                   "laço é ciclo e conta como incidência no vértice");
+             network.routes = {{0, 1, 0}};
+             bool rejected = false;
+             try {
+                 analyzeRoutes(network);
+             } catch (const std::invalid_argument&) {
+                 rejected = true;
+             }
+             check(rejected, "rota com extremidade inválida em rede construída em memória");
+         }});
+    tests.push_back(
+        {"menu análise de rotas e regressão da rede", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             std::istringstream input("11\n7\n11\n1\n" + scenario +
+                                      "\n11\n7\n11\n3\nterre\nmars\n11\n4\n11\n5\n"
+                                      "11\n6\nterre\nmars\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto analysis = text.find("Análise das rotas de deslocamento\n");
+             check(text.find("Nenhum cenário de rede carregado.") < analysis &&
+                       text.find("Ciclo direcionado: terre -> lune -> mars -> terre\n"
+                                 "Componentes fracamente conectados (1), ignorando o sentido das rotas\n"
+                                 "  1. terre lune mars\nVértices isolados (0)", analysis) !=
+                           std::string::npos,
+                   "menu mostra os IDs do ciclo, do componente e a contagem de isolados");
+             check(text.find("Percurso: terre -> lune -> mars\nCusto total: 6", analysis) !=
+                       std::string::npos &&
+                       text.find("Ordem de execução das atividades\n  1. prepare", analysis) !=
+                           std::string::npos &&
+                       text.find("Custo total da infraestrutura: 8", analysis) != std::string::npos &&
+                       text.find("Fluxo máximo: 6", analysis) != std::string::npos &&
+                       text.find("Encerrado.") != std::string::npos,
+                   "Dijkstra, Kahn, Kruskal e Edmonds–Karp continuam disponíveis");
          }});
     int failures = 0;
     for (const auto& t : tests) {

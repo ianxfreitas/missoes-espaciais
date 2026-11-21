@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento, `4` para ordenar as atividades, `5` para planejar a infraestrutura e `6` para calcular a transferência máxima.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento, `4` para ordenar as atividades, `5` para planejar a infraestrutura, `6` para calcular a transferência máxima e `7` para analisar as rotas.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -388,9 +388,19 @@ Para `V` vértices e `E` canais, a construção residual usa tempo e espaço `O(
 
 No cenário de exemplo, `11 → 6` com origem `terre` e destino `mars` apresenta fluxo máximo 6. Quatro unidades seguem pela Lua e duas pelo canal direto. O corte mínimo contém `lune → mars` (capacidade 4) e `terre → mars` (capacidade 2).
 
+### Análise das rotas de deslocamento
+
+`analyzeRoutes` usa somente `routes` e monta um índice temporário que referencia as rotas pelos dois extremos. A DFS percorre somente as rotas que saem do vértice atual. A pilha explícita guarda o caminho em andamento. Cada vértice pode estar inédito, ativo na pilha ou finalizado. Uma aresta para um vértice ativo fecha um ciclo. O algoritmo devolve o trecho da pilha desde esse vértice e repete seu ID no fim para mostrar o fechamento. Um laço também forma um ciclo.
+
+Um **componente fracamente conectado** é um conjunto máximo de vértices que podem ser ligados por rotas quando se ignora o sentido. Para encontrá-los, uma busca percorre as rotas incidentes pelos dois extremos. Um **vértice isolado** tem zero rotas de entrada e zero de saída e forma seu próprio componente. Um laço conta como uma rota incidente. Infraestrutura, canais de transferência e dependências têm suas próprias operações no menu.
+
+Um ciclo oferece um circuito de retorno compatível com o sentido das rotas, por exemplo para planejar uma missão que deve voltar à base. Componentes diferentes indicam regiões entre as quais não há deslocamento no cenário. Um vértice isolado precisa de novas rotas para participar de um itinerário. Dentro do mesmo componente fraco, uma ligação de mão única pode permitir a ida e impedir a volta. Use Dijkstra para conferir cada sentido do deslocamento.
+
+O tempo e a memória auxiliar são `O(V + R)` para `V` vértices e `R` rotas. Use `11 → 7` depois de carregar `scenarios/solar-network.json`. O cenário mostra o ciclo `terre → lune → mars → terre`, um componente fraco e zero isolados.
+
 ## Testes e validação
 
-A suíte possui 48 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem cenários válidos e inválidos, tipos de aresta, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra, Kahn e Kruskal verificam caminhos mínimos, ordens de atividades e conexões de custo mínimo. Os testes de Edmonds–Karp conferem gargalos, caminhos múltiplos, reajustes residuais, conservação, fluxo zero, limites numéricos e a igualdade entre fluxo máximo e capacidade do corte exibido no submenu.
+A suíte possui 53 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem cenários válidos e inválidos, tipos de aresta, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra, Kahn e Kruskal verificam caminhos mínimos, ordens de atividades e conexões de custo mínimo. Os testes de Edmonds–Karp conferem gargalos, reajustes residuais, conservação e a igualdade entre fluxo máximo e capacidade do corte. Os testes de análise das rotas verificam ciclos e laços, redes acíclicas ou desconexas, isolamento, mão única, casos-limite e regressão do submenu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

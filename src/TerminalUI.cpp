@@ -168,8 +168,9 @@ void TerminalUI::plan(bool dynamic) {
 void TerminalUI::networkMenu() {
     const auto mode = integer(
         "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento, "
-        "4 ordenar atividades, 5 planejar infraestrutura, 6 calcular transferência máxima: ",
-        6);
+        "4 ordenar atividades, 5 planejar infraestrutura, 6 calcular transferência máxima, "
+        "7 analisar rotas: ",
+        7);
     if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
@@ -185,8 +186,10 @@ void TerminalUI::networkMenu() {
         showActivityOrder(*network_);
     } else if (mode == 5) {
         showInfrastructurePlan(*network_);
-    } else {
+    } else if (mode == 6) {
         showMaximumTransfer(*network_);
+    } else {
+        showRouteAnalysis(*network_);
     }
 }
 void TerminalUI::planRoute(const MissionNetwork& network) {
@@ -275,6 +278,30 @@ void TerminalUI::showMaximumTransfer(const MissionNetwork& network) {
         output_ << "  " << network.vertices[channel.from] << " -> "
                 << network.vertices[channel.to] << " | capacidade " << channel.capacity << '\n';
     }
+}
+void TerminalUI::showRouteAnalysis(const MissionNetwork& network) {
+    const auto analysis = analyzeRoutes(network);
+    output_ << "Análise das rotas de deslocamento\n";
+    if (analysis.cycle.empty()) {
+        output_ << "Nenhum ciclo direcionado encontrado.\n";
+    } else {
+        output_ << "Ciclo direcionado: ";
+        for (std::size_t i = 0; i < analysis.cycle.size(); ++i) {
+            if (i > 0) output_ << " -> ";
+            output_ << network.vertices[analysis.cycle[i]];
+        }
+        output_ << '\n';
+    }
+
+    output_ << "Componentes fracamente conectados (" << analysis.weakComponents.size()
+            << "), ignorando o sentido das rotas\n";
+    for (std::size_t i = 0; i < analysis.weakComponents.size(); ++i) {
+        output_ << "  " << i + 1 << '.';
+        for (auto vertex : analysis.weakComponents[i]) output_ << ' ' << network.vertices[vertex];
+        output_ << '\n';
+    }
+    output_ << "Vértices isolados (" << analysis.isolatedVertices.size() << ")\n";
+    for (auto vertex : analysis.isolatedVertices) output_ << "  " << network.vertices[vertex] << '\n';
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

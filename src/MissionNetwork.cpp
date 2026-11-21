@@ -127,6 +127,50 @@ class DisjointSets {
         return true;
     }
 };
+
+using IncidentRoutes = std::vector<std::vector<const TravelRoute*>>;
+
+std::vector<std::size_t> findRouteCycle(const IncidentRoutes& incident) {
+    enum class Visit { unseen, active, finished };
+    struct Frame {
+        std::size_t vertex;
+        std::size_t nextRoute = 0;
+    };
+
+    std::vector<Visit> state(incident.size(), Visit::unseen);
+    std::vector<Frame> stack;
+    for (std::size_t start = 0; start < incident.size(); ++start) {
+        if (state[start] != Visit::unseen) continue;
+        state[start] = Visit::active;
+        stack.push_back({start});
+        while (!stack.empty()) {
+            auto& frame = stack.back();
+            const auto vertex = frame.vertex;
+            if (frame.nextRoute == incident[vertex].size()) {
+                state[vertex] = Visit::finished;
+                stack.pop_back();
+                continue;
+            }
+
+            const auto& route = *incident[vertex][frame.nextRoute++];
+            if (route.from != vertex) continue;
+            if (state[route.to] == Visit::unseen) {
+                state[route.to] = Visit::active;
+                stack.push_back({route.to});
+            } else if (state[route.to] == Visit::active) {
+                // O trecho da pilha a partir do ancestral já é um caminho dirigido.
+                auto first = std::find_if(stack.begin(), stack.end(), [&](const auto& step) {
+                    return step.vertex == route.to;
+                });
+                std::vector<std::size_t> cycle;
+                for (; first != stack.end(); ++first) cycle.push_back(first->vertex);
+                cycle.push_back(route.to);
+                return cycle;
+            }
+        }
+    }
+    return {};
+}
 }  // namespace
 
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
@@ -320,6 +364,41 @@ TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& o
         if (reached[channel.from] && !reached[channel.to]) cut.push_back(i);
     }
     return plan;
+}
+
+RouteAnalysis analyzeRoutes(const MissionNetwork& network) {
+    const auto count = network.vertices.size();
+    // O índice temporário referencia as mesmas rotas pelos dois extremos.
+    IncidentRoutes incident(count);
+    for (const auto& route : network.routes) {
+        if (route.from >= count || route.to >= count)
+            throw std::invalid_argument("Rota com extremidade fora do cenário");
+        incident[route.from].push_back(&route);
+        if (route.from != route.to) incident[route.to].push_back(&route);
+    }
+
+    RouteAnalysis analysis;
+    analysis.cycle = findRouteCycle(incident);
+    std::vector<bool> reached(count, false);
+    for (std::size_t start = 0; start < count; ++start) {
+        if (incident[start].empty()) analysis.isolatedVertices.push_back(start);
+        if (reached[start]) continue;
+
+        // Reutiliza o componente como fila e percorre rotas nos dois sentidos.
+        auto& component = analysis.weakComponents.emplace_back();
+        component.push_back(start);
+        reached[start] = true;
+        for (std::size_t next = 0; next < component.size(); ++next) {
+            const auto vertex = component[next];
+            for (const auto* route : incident[vertex]) {
+                const auto neighbor = route->from == vertex ? route->to : route->from;
+                if (reached[neighbor]) continue;
+                reached[neighbor] = true;
+                component.push_back(neighbor);
+            }
+        }
+    }
+    return analysis;
 }
 
 MissionNetwork parseMissionNetwork(const std::string& text,

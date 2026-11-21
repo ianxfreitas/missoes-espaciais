@@ -61,6 +61,13 @@ struct TransferPlan {
     std::optional<std::vector<std::size_t>> cutChannels;
 };
 
+struct RouteAnalysis {
+    // Índices em vertices. Um ciclo repete o primeiro vértice no fim.
+    std::vector<std::size_t> cycle;
+    std::vector<std::vector<std::size_t>> weakComponents;
+    std::vector<std::size_t> isolatedVertices;
+};
+
 // Retorna nullopt para um destino inalcançável. IDs fora do cenário são inválidos.
 std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
                                              const std::string& origin,
@@ -75,6 +82,9 @@ InfrastructurePlan planInfrastructure(const MissionNetwork& network);
 
 TransferPlan maximumTransfer(const MissionNetwork& network, const std::string& origin,
                              const std::string& destination);
+
+// Analisa apenas routes. Componentes fracos ignoram o sentido das rotas.
+RouteAnalysis analyzeRoutes(const MissionNetwork& network);
 
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);
