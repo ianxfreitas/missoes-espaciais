@@ -1,6 +1,6 @@
 # Crônicas do Espaço — Planejamento Algorítmico de Missões
 
-Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelotas (UFPel). O sistema consulta dados reais do Sistema Solar, organiza corpos celestes em uma Tabela Hash própria, indexa nomes em uma Trie e executa uma heurística gulosa para selecionar destinos sob recursos limitados.
+Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelotas (UFPel). O sistema cataloga corpos celestes com dados reais do Sistema Solar, seleciona destinos sob restrições de recursos e analisa uma rede de deslocamentos, atividades, infraestrutura e transferências.
 
 ## Integrantes
 
@@ -9,11 +9,11 @@ Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelota
 
 ## Escopo e fonte principal
 
-O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 incorpora a Trie para busca por nome, a Árvore B para buscas por atributos físicos, a otimização de recursos por programação dinâmica e a representação da rede espacial. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
+O enunciado fornecido pela disciplina é `T2 26_2 M1+M2.pdf`. Este README reúne o relatório técnico das duas partes, incluindo a análise amortizada. A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 incorpora a Trie, a Árvore B, a otimização por programação dinâmica e a análise da rede espacial, com Kosaraju como funcionalidade adicional.
 
 ## Ferramentas e instalação no Fedora
 
-C++17, CMake, libcurl e nlohmann-json. Não há download implícito de dependências pelo CMake.
+C++17, CMake 3.16 ou posterior, libcurl e nlohmann-json 3.6.0 ou posterior. O mínimo do nlohmann-json corresponde à introdução de `contains()` para chaves de objeto, usada pelo parser. O CMake usa as dependências instaladas no ambiente. [Histórico de `contains()`](https://json.nlohmann.me/api/basic_json/contains/#version-history)
 
 ```bash
 sudo dnf install gcc-c++ cmake libcurl-devel nlohmann-json-devel
@@ -21,25 +21,23 @@ sudo dnf install gcc-c++ cmake libcurl-devel nlohmann-json-devel
 sudo dnf install libasan libubsan valgrind
 ```
 
-O ambiente inicial disponibilizou GCC 16.2.1, CMake 4.3.0, libcurl 8.18.0 e configuração CMake do nlohmann-json 3.12.0. O pacote de desenvolvimento nlohmann-json não constava no RPM local, mas seu cabeçalho e configuração CMake funcionaram na compilação.
-
 ## Compilação, testes e execução
 
-Na raiz do repositório:
+Na raiz do repositório, use um diretório de compilação novo. Execute os exemplos seguintes na mesma sessão Bash para manter o valor de `build_dir`. O executável é iniciado somente após a configuração, a compilação e os testes passarem.
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build -j2
-ctest --test-dir build --output-on-failure
-./build/missoes
+build_dir=$(mktemp -d "${TMPDIR:-/tmp}/cronicas-entrega.XXXXXX") &&
+  cmake -S . -B "$build_dir" -DCMAKE_BUILD_TYPE=Debug &&
+  cmake --build "$build_dir" --parallel 2 &&
+  (cd "$build_dir" && ctest --output-on-failure) &&
+  "$build_dir/missoes" --json tests/fixtures/bodies.json
 ```
 
-Para ver cada grupo de testes, execute `./build/cronicas_tests`. O CTest registra uma suíte, que reúne os grupos internos.
+Para ver cada grupo de testes, use `(cd "$build_dir" && ctest --verbose)`. O CTest registra a suíte `cronicas_tests`, que reúne os grupos internos.
 
 ```bash
-./build/missoes --help
-# Modo local explícito: não efetua aquisição dinâmica
-./build/missoes --json tests/fixtures/bodies.json
+"$build_dir/missoes" --help
+"$build_dir/missoes" --json tests/fixtures/bodies.json
 ```
 
 O arquivo de fixture contém um pequeno conjunto didático, com um corpo sintético para testar ausência de informações. Ele não representa a coleção atual inteira da API e não é apresentado como aquisição dinâmica.
@@ -52,7 +50,7 @@ Obtenha um token em https://api.le-systeme-solaire.net/generatekey.html. Em Bash
 read -r -s -p 'SOLAR_API_KEY: ' SOLAR_API_KEY
 printf '\n'
 export SOLAR_API_KEY
-./build/missoes
+"$build_dir/missoes"
 unset SOLAR_API_KEY
 ```
 
@@ -62,7 +60,7 @@ O programa lê a variável somente ao carregar a API. Não imprime cabeçalhos, 
 
 API: **The Solar System OpenData**, https://api.le-systeme-solaire.net/.
 Documentação oficial: https://api.le-systeme-solaire.net/ e https://api.le-systeme-solaire.net/swagger/.
-Consulta documental e validação autenticada: **08/10/2026**.
+Consulta documental e validação autenticada inicial em **08/10/2026**.
 
 A escolha se justifica pela diversidade de planetas, luas, planetas anões, asteroides e cometas e por seus atributos físicos. Foram observados HTTP 200 nos endpoints de coleção e Terra durante a validação inicial: 554 registros; seis categorias, incluindo Star. A disponibilidade e os valores podem mudar.
 
@@ -137,12 +135,10 @@ Massa é mantida em notação científica, sem expandir potências desnecessaria
 | `MissionPlanner` | Estimativas físicas, seleção gulosa e otimização por programação dinâmica |
 | `MissionNetwork` | Representação e validação do cenário da rede espacial |
 | `scenarios/solar-network.json` | Cenário didático com Terra, Lua e Marte |
+| `scenarios/solar-network-multiple-groups.json` | Cenário didático com dois componentes fortes |
 | `TerminalUI`, `main.cpp` | Menu, leitura e apresentação |
 | `tests/tests.cpp` | Suíte sem dependência de rede |
 | `tests/fixtures/bodies.json` | Entrada local de teste |
-| `docs/arguicao.md` | Demonstração e perguntas para defesa |
-| `docs/validacao.md` | Registro dos resultados executados |
-| `data/` | Local sugerido para dados locais próprios; não exige um snapshot versionado |
 
 A libcurl é encapsulada por um contrato simples que permite substituir o transporte por um cliente simulado nos testes. Não há dependência de framework de testes.
 
@@ -184,21 +180,23 @@ O rehashing aloca um vetor de baldes vazio e religa cada nó segundo o hash arma
 
 ## Complexidades
 
-Considere `L` o comprimento de uma chave, `n` elementos e `m` baldes. Comparações textuais também dependem do tamanho das strings.
+Considere `n` corpos, `m` baldes, `k` resultados e `L` bytes na chave ou consulta. Na busca por prefixo, `s` é o número de nós visitados na subárvore e `a` é o número de associações coletadas antes de eliminar IDs repetidos. Nas varreduras, `T` é o custo total de preparar e comparar os campos de cada corpo. Os custos de ordenar e resolver IDs abaixo supõem IDs de comprimento limitado.
 
-| Operação | Esperado / amortizado | Pior caso |
-|---|---|---|
-| Calcular hash | O(L) | O(L) |
-| Buscar ID | O(L), para IDs limitados O(1) | O(L + nL) em cadeias adversariais |
-| Inserir sem expansão / atualizar | O(L), com distribuição adequada | O(L + nL), além da cópia dos atributos |
-| Rehashing isolado | O(m+n) | O(m+n), mesmo com todos os nós num balde |
-| Inserções com crescimento | Expansão O(1) amortizada; operação O(1) esperada para chaves limitadas | Uma inserção pode disparar O(n) de expansão |
-| Percorrer Hash / destruir | O(m+n) | O(m+n) |
-| Pesquisa / filtros | Varredura O(m+n), mais comparação de atributos e ordenação dos resultados | O(m+n+k log k), para k resultados com IDs limitados |
-| Listagem ordenada | O(m+n+n log n) | Igual |
-| Planejador, dado vetor de candidatos | O(n log n) tempo, O(n) espaço | Igual |
+| Operação | Estrutura e custo de tempo |
+|---|---|
+| Consulta por ID | Hash. Calcular o hash custa `O(L)`. Com comprimento limitado, a consulta é `O(1)` esperada e `O(n)` no pior caso de colisões. |
+| Busca por nome exato | Trie e resolução na Hash. `O(L + k)` esperado. |
+| Busca por prefixo | Trie e resolução na Hash. `O(L + s + a log(a + 1))` esperado, incluindo ordenação e deduplicação dos IDs. |
+| Filtro numérico por valor ou intervalo | Árvore B e resolução na Hash. O índice custa `O(log(n + 1) + k)`. A ordenação final por ID acrescenta `O(k log(k + 1))`. |
+| Trecho de nome, tipo ou condição de planeta | Varredura da Hash em `O(L + m + n + T + k log(k + 1))`, incluindo a preparação da consulta e a ordenação dos resultados. |
+| Listagem ordenada | Varredura da Hash e ordenação em `O(m + n + n log(n + 1))`. |
+| Inserir sem expansão ou atualizar na Hash | `O(1)` esperado e `O(n)` no pior caso de colisões, além da cópia dos atributos. |
+| Rehashing isolado | `O(m + n)`, inclusive quando todos os nós estão em um balde. |
+| Inserções com crescimento | O custo da expansão é `O(1)` amortizado por inserção. Uma inserção pode disparar uma expansão de custo `O(n)` quando a capacidade inicial é fixa. |
+| Percorrer ou destruir a Hash | `O(m + n)`. |
+| Planejamento guloso, dado o vetor de candidatos | `O(n log(n + 1))` de tempo e `O(n)` de memória, usando `n` como número de candidatos. |
 
-No catálogo construído por crescimento a partir de 16, `m=O(n+1)`. Busca por atributos não se beneficia de índice por ID; ela percorre a estrutura e ordena os resultados por ID para apresentação determinística. O custo de cópia de strings é adicional às estimativas com chaves limitadas.
+Com capacidade inicial fixa, `m = O(n + 1)`. Para consultas que resolvem `k` IDs na Hash, a resolução custa `O(k)` em média com distribuição adequada e pode custar `O(kn)` no pior caso de colisões. As complexidades das demais operações dos índices e dos planejadores estão nas seções correspondentes.
 
 ## Análise amortizada detalhada do rehashing
 
@@ -238,6 +236,8 @@ A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a
 
 ## Trie e Árvore B
 
+As fábricas `makeTrieIndex` e `makeBTreeIndex` permitem instanciar as implementações próprias sem expor os nós. As assinaturas virtuais projetadas na Parte 1 foram preservadas.
+
 `makeTrieIndex` cria uma implementação de `TrieIndex`. Cada aresta representa um byte do nome e cada nó que encerra um nome guarda os IDs associados. `insert` mantém IDs distintos para um mesmo nome e `erase` remove um par nome–ID, podando os nós que ficam sem IDs e filhos. O catálogo normaliza os nomes de exibição para minúsculas e resolve na Hash os IDs devolvidos pela Trie, em ordem por ID.
 
 A busca exata percorre o caminho do nome inteiro e devolve os IDs do nó final. A busca por prefixo percorre também a subárvore desse nó e devolve IDs únicos. O nome vazio na busca exata produz zero resultados. O prefixo vazio percorre todo o índice. A métrica exibida no menu conta a raiz e cada nó alcançado uma vez, inclusive em buscas sem resultado.
@@ -245,6 +245,8 @@ A busca exata percorre o caminho do nome inteiro e devolve os IDs do nó final. 
 Considerando IDs de tamanho limitado, `L` bytes no nome ou prefixo, `A` IDs no nó final, `S` nós na subárvore e `K` associações coletadas, inserção e remoção custam `O(L + log(A + 1))`. Cada nó tem até 256 filhos. A busca exata custa `O(L + A)`. A busca por prefixo custa `O(L + S + K log(K + 1))`, incluindo a ordenação para deduplicar os IDs.
 
 `makeBTreeIndex` cria uma Árvore B de grau mínimo 2, com até três chaves por nó e todas as folhas no mesmo nível. A chave `(valor, ID)` distingue corpos que têm o mesmo valor. A inserção promove a chave mediana de um nó cheio e divide suas chaves e filhos em dois nós. Na remoção, antes de descer para um filho com o mínimo de chaves, o algoritmo redistribui uma chave com um irmão ou funde os dois filhos com a chave separadora do pai. Uma chave interna pode ser substituída pelo predecessor ou sucessor. Quando a raiz perde a última chave, seu único filho assume a raiz, se houver.
+
+O grau mínimo 2 foi escolhido para fins didáticos. Com até três chaves e quatro filhos por nó, pequenos conjuntos de teste já forçam divisões, redistribuições e fusões que podem ser acompanhadas durante a arguição. Para o tamanho do catálogo usado no projeto, essa escolha prioriza a facilidade de inspecionar as operações. Um grau maior pode reduzir a altura em catálogos maiores. Com grau fixo, a altura continua logarítmica.
 
 Há uma árvore por atributo entre `gravity`, `meanRadius` e `avgTemp`. O catálogo indexa zeros presentes e ignora campos ausentes. Esses atributos e seus limites são não negativos na modelagem física atual. A interface da árvore aceita negativos finitos em usos que os admitam. Intervalos incluem ambos os extremos, e limites iguais disparam busca exata. A árvore retorna IDs na ordem de `(valor, ID)`. O catálogo resolve cada ID na Hash e mantém a ordenação por ID que o menu já usava.
 
@@ -342,7 +344,7 @@ As seis listas são obrigatórias e podem ser vazias. Redes desconexas, vértice
 
 O cenário de exemplo usa Terra (`terre`), Lua (`lune`) e Marte (`mars`). Os custos de deslocamento em unidades didáticas permitem comparar um trajeto direto de custo 8 com duas etapas de custos 2 e 4. O retorno direto de Marte tem custo 9 para representar assimetria. Os custos de implantação 3, 5 e 7 oferecem alternativas de conexão. As capacidades inteiras 5, 4 e 2, em unidades de recurso por período, permitem estudar um gargalo no trecho Lua–Marte e um canal direto de capacidade menor. Esses pesos são parâmetros didáticos independentes dos atributos físicos da API.
 
-Na raiz do repositório, execute `./build/missoes --json tests/fixtures/bodies.json`. No menu, use `11 → 1`, informe `scenarios/solar-network.json` e depois use `11 → 2`. Se a carga do cenário falhar, o cenário anterior fica disponível. Uma recarga bem-sucedida do catálogo preserva a rede se todos os seus IDs ainda existirem. Quando algum ID falta, o menu informa que a rede foi descartada.
+Na raiz do repositório, execute `"$build_dir/missoes" --json tests/fixtures/bodies.json`. No menu, use `11 → 1`, informe `scenarios/solar-network.json` e depois use `11 → 2`. Se a carga do cenário falhar, o cenário anterior fica disponível. Uma recarga bem-sucedida do catálogo preserva a rede se todos os seus IDs ainda existirem. Quando algum ID falta, o menu informa que a rede foi descartada.
 
 Para `V` corpos, `A` atividades e `E` relações totais, o cenário ocupa `O(V + A + E)`. Os mapas e conjuntos temporários usados para resolver IDs e checar duplicatas têm o mesmo limite de espaço. Percorrer a representação ou construir listas de adjacência a partir dela custa `O(V + A + E)`.
 
@@ -406,7 +408,7 @@ A funcionalidade adicional escolhida para a Parte 2 é a **Opção A da Seção 
 
 Para `V` vértices e `R` rotas, o tempo e o espaço auxiliar são `O(V + R)`. Cada passagem visita os vértices e percorre uma quantidade linear de incidências. O resultado ajuda a identificar regiões com possibilidade de ida e volta. Para calcular o custo dos trajetos entre dois corpos do grupo, use Dijkstra em cada sentido.
 
-Execute `./build/missoes --json tests/fixtures/bodies.json`. Em `11 → 1`, carregue um dos arquivos abaixo. Use `11 → 8` para listar os IDs e nomes em cada grupo.
+Execute `"$build_dir/missoes" --json tests/fixtures/bodies.json`. Em `11 → 1`, carregue um dos arquivos abaixo. Use `11 → 8` para listar os IDs e nomes em cada grupo.
 
 | Arquivo | Grupos esperados |
 |---|---|
@@ -415,16 +417,40 @@ Execute `./build/missoes --json tests/fixtures/bodies.json`. Em `11 → 1`, carr
 
 ## Testes e validação
 
-A suíte possui 58 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie e da Árvore B verificam operações de consulta e remoção, entradas inválidas e integração com o catálogo. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva. Os testes da rede cobrem o carregamento de cenários, caminhos mínimos, ordens de atividades, árvores e florestas de custo mínimo, fluxo máximo e corte mínimo, ciclos e componentes fracos. Os testes de Kosaraju cobrem os dois cenários de demonstração, grafos acíclicos e desconexos, vértices isolados, casos-limite, regressão pelo menu e comparação com alcançabilidade mútua em todos os 512 grafos dirigidos de três vértices, incluindo laços.
+Em **21/11/2026**, duas compilações limpas em modo Debug com GCC 16.2.1, CMake 4.3.0 e libcurl 8.21.0 passaram no CTest. Uma usou nlohmann-json 3.12.0 e a outra usou a versão mínima 3.6.0, selecionada na configuração com `-Dnlohmann_json_DIR=/caminho/para/o/diretorio/do/config`. Em cada compilação, o CTest executou uma suíte com **58 grupos aprovados**. A sessão local do menu também passou com o título atualizado.
 
-Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
+A suíte cobre modelo, JSON, HTTP simulado, Hash, catálogo e regressões do menu. Os testes da Trie e da Árvore B verificam consultas, remoção, entradas inválidas e recarga do catálogo. A programação dinâmica é comparada com enumeração exaustiva em 308 combinações de candidatos, orçamento e limite. Os testes de rede cobrem o carregamento, caminhos inalcançáveis, ciclos de dependência, florestas de infraestrutura, reajuste de fluxo e igualdade com o corte mínimo. Os testes de Kosaraju comparam a partição obtida com a alcançabilidade mútua em todos os 512 grafos direcionados de três vértices, incluindo laços.
+
+### Roteiro de demonstração
+
+Use o arquivo `tests/fixtures/bodies.json` conforme as instruções de compilação. Os resultados abaixo foram conferidos numa sessão do menu.
+
+| Opção e entrada | Resultado |
+|---|---|
+| `2`, ID `mars` | A Hash retorna Mars. |
+| `3 → 1`, trecho `art` | A varredura encontra Earth. |
+| `3 → 3`, nome `eArTh` e `3 → 4`, prefixo `Mo` | A Trie encontra Earth e Moon, respectivamente, e mostra 6 e 5 nós visitados. |
+| `3 → 2`, `gravity`, limites 1 e 4, depois `7` | A Árvore B encontra Moon e Mars. O índice de gravidade mostra altura 2 e uma divisão. |
+| `8` e `10`, orçamento 40 e limite 2 | Os dois planejadores selecionam Lua e Marte, com custo total de aproximadamente 35,12 e benefício de 20,61. A suíte também verifica o caso sintético em que o benefício da programação dinâmica é 18 e o do guloso é 12. |
+| `11 → 1`, arquivo `scenarios/solar-network.json`, depois `11 → 2` | Carrega três vértices e mostra a rota direta Terra → Marte com custo 8. |
+| `11 → 3`, origem `terre` e destino `mars` | Dijkstra encontra Terra → Lua → Marte com custo 6. |
+| `11 → 4` e `11 → 5` | Kahn ordena `prepare → relay → survey`. Kruskal seleciona duas ligações com custo total 8. |
+| `11 → 6`, origem `terre` e destino `mars` | Edmonds–Karp encontra fluxo 6 e corte mínimo de capacidade 6. |
+| `11 → 7` e `11 → 8` | A análise mostra um ciclo, um componente fraco e nenhum isolado. Kosaraju encontra um grupo. Após carregar `scenarios/solar-network-multiple-groups.json`, Kosaraju encontra dois grupos. |
+
+### Limitações e verificações manuais
+
+- API autenticada. Para repetir a validação de rede, configure um token conforme a seção da API, execute `"$build_dir/missoes"` e escolha `1 → 1`. Confira a fonte API dinâmica e as métricas do catálogo. Nesta rodada a suíte usou o transporte simulado e a demonstração usou dados locais. A consulta autenticada depende de token e disponibilidade do serviço.
+- Dados e planejamento. O catálogo fica em memória. Os nomes têm normalização de maiúsculas ASCII. A programação dinâmica tem limite de 64 MiB nas tabelas e garante o ótimo no modelo discretizado. Os pesos dos planejadores e das relações da rede são didáticos. Kosaraju mostra alcance mútuo no cenário fornecido, com custos de viagem avaliados separadamente por Dijkstra.
+- Entrega e arguição. Confira o acesso da docente à versão de entrega do repositório. Durante a demonstração, use o roteiro acima e revise a análise amortizada, os índices, a reconstrução do plano e os tipos de relações usados por cada algoritmo.
+
+Para verificar memória com ASan e UBSan, instale os runtimes correspondentes ao compilador e use outra compilação limpa. O runtime de ASan do GCC estava ausente no ambiente de validação.
 
 ```bash
-cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON
-cmake --build build-asan -j2
-ASAN_OPTIONS=detect_leaks=1 ctest --test-dir build-asan --output-on-failure
-# Alternativa, se instalado:
-valgrind --leak-check=full --error-exitcode=1 ./build/cronicas_tests
+asan_dir=$(mktemp -d "${TMPDIR:-/tmp}/cronicas-asan.XXXXXX") &&
+  cmake -S . -B "$asan_dir" -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON &&
+  cmake --build "$asan_dir" --parallel 2 &&
+  (cd "$asan_dir" && ASAN_OPTIONS=detect_leaks=1 ctest --output-on-failure)
 ```
 
-Resultados realmente executados, limitações do ambiente e histórico estão em [docs/validacao.md](docs/validacao.md). O roteiro de avaliação e os conceitos a revisar estão em [docs/arguicao.md](docs/arguicao.md).
+Com Valgrind instalado, uma alternativa é executar `valgrind --leak-check=full --error-exitcode=1 "$build_dir/cronicas_tests"` na compilação Debug regular.

@@ -351,7 +351,7 @@ void TerminalUI::showNetwork(const MissionNetwork& network) {
                 << network.activities[dependency.after].id << '\n';
 }
 void TerminalUI::run() {
-    output_ << std::setprecision(8) << "Crônicas do Espaço — Parte 1\n";
+    output_ << std::setprecision(8) << "Crônicas do Espaço — Planejamento Algorítmico de Missões\n";
     while (true) {
         try {
             output_
