@@ -9,7 +9,7 @@ Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelota
 
 ## Escopo e fonte principal
 
-O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 já incorpora a Trie para busca por nome. A Árvore B tem sua interface definida. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
+O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 já incorpora a Trie para busca por nome e a Árvore B para buscas por atributos físicos. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
 
 ## Ferramentas e instalação no Fedora
 
@@ -133,7 +133,7 @@ Massa é mantida em notação científica, sem expandir potências desnecessaria
 | `HashTable` | Nós próprios, busca, inserção, atualização, memória e métricas |
 | `BodyCatalog` | Carga transacional, pesquisas e filtros |
 | `TrieIndex` | Interface e implementação da Trie para nomes |
-| `BTreeIndex` | Interface da Árvore B |
+| `BTreeIndex` | Interface e implementação da Árvore B para atributos físicos |
 | `MissionPlanner` | Estimativas físicas e seleção gulosa |
 | `TerminalUI`, `main.cpp` | Menu, leitura e apresentação |
 | `tests/tests.cpp` | Suíte sem dependência de rede |
@@ -146,7 +146,7 @@ A libcurl é encapsulada por um contrato simples que permite substituir o transp
 
 O HTTP verifica TLS, limita a resposta a 16 MiB e utiliza timeouts de conexão de 10 s e total de 30 s. Redirecionamentos não são seguidos para evitar encaminhamento de credenciais a outro host. Erros de transporte, autenticação, limite de requisições, outros status e parsing são comunicados. Não há repetição automática nem substituição silenciosa por JSON local.
 
-A carga constrói uma Hash temporária e usa seus registros finais para montar a Trie. Com as duas estruturas prontas, substitui o catálogo atual. Falha de aquisição, parsing, alocação ou carga vazia preserva o catálogo anterior. Campos defeituosos opcionais permitem carga parcial com avisos; não há garantia de completude quando registros são rejeitados.
+A carga constrói uma Hash temporária e usa seus registros finais para montar a Trie e as três Árvores B. Com os índices prontos, substitui o catálogo atual. Falha de aquisição, parsing, alocação ou carga vazia preserva o catálogo anterior. Campos defeituosos opcionais permitem carga parcial com avisos; não há garantia de completude quando registros são rejeitados.
 
 Armazenamento local significa objetos na memória da aplicação após a aquisição, como permitido pelo enunciado. Não há cache persistente automático. A opção JSON local é explícita; consumo exclusivamente estático corresponde ao Nível 2 (70% da pontuação do módulo de aquisição), enquanto o GET durante a execução atende ao Nível 1.
 
@@ -226,13 +226,13 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 4. Listar: todos os corpos, ordenados por ID.
 5. Filtrar: tipo ou condição de planeta.
 6. Comparar: consultar dois IDs na Hash, mostrar características e diferenças físicas conhecidas.
-7. Estatísticas: fonte, elementos, capacidade, colisões, fator de carga e expansões.
+7. Estatísticas. Exibe fonte, elementos, capacidade, colisões, fator de carga e expansões da Hash e a altura e as divisões da Árvore B de cada atributo.
 8. Planejar: orçamento e limite de missões, candidatos excluídos, destinos e totais.
 9. Encerrar.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
-## Trie e interface da Árvore B
+## Trie e Árvore B
 
 `makeTrieIndex` cria uma implementação de `TrieIndex`. Cada aresta representa um byte do nome e cada nó que encerra um nome guarda os IDs associados. `insert` mantém IDs distintos para um mesmo nome e `erase` remove um par nome–ID, podando os nós que ficam sem IDs e filhos. O catálogo normaliza os nomes de exibição para minúsculas e resolve na Hash os IDs devolvidos pela Trie, em ordem por ID.
 
@@ -240,7 +240,11 @@ A busca exata percorre o caminho do nome inteiro e devolve os IDs do nó final. 
 
 Considerando IDs de tamanho limitado, `L` bytes no nome ou prefixo, `A` IDs no nó final, `S` nós na subárvore e `K` associações coletadas, inserção e remoção custam `O(L + log(A + 1))`. Cada nó tem até 256 filhos. A busca exata custa `O(L + A)`. A busca por prefixo custa `O(L + S + K log(K + 1))`, incluindo a ordenação para deduplicar os IDs.
 
-`BTreeIndex` define insert/erase da associação valor–ID, consulta exata, intervalo inclusivo, altura e splits. A chave ordenada futura será `(valor, ID)` para preservar corpos com valores físicos iguais. Valores não finitos devem ser rejeitados. Altura e convenção para árvore vazia devem ser documentadas na Parte 2.
+`makeBTreeIndex` cria uma Árvore B de grau mínimo 2, com até três chaves por nó e todas as folhas no mesmo nível. A chave `(valor, ID)` distingue corpos que têm o mesmo valor. A inserção promove a chave mediana de um nó cheio e divide suas chaves e filhos em dois nós. Na remoção, antes de descer para um filho com o mínimo de chaves, o algoritmo redistribui uma chave com um irmão ou funde os dois filhos com a chave separadora do pai. Uma chave interna pode ser substituída pelo predecessor ou sucessor. Quando a raiz perde a última chave, seu único filho assume a raiz, se houver.
+
+Há uma árvore por atributo entre `gravity`, `meanRadius` e `avgTemp`. O catálogo indexa zeros presentes e ignora campos ausentes. Esses atributos e seus limites são não negativos na modelagem física atual. A interface da árvore aceita negativos finitos em usos que os admitam. Intervalos incluem ambos os extremos, e limites iguais disparam busca exata. A árvore retorna IDs na ordem de `(valor, ID)`. O catálogo resolve cada ID na Hash e mantém a ordenação por ID que o menu já usava.
+
+Com grau fixo e IDs de tamanho limitado, `insert` e `erase` custam `O(log n)`. `exact` e `range` custam `O(log n + k)` para `k` associações retornadas. A consulta poda ramos fora dos limites, e o catálogo ainda ordena os resultados em `O(k log k)`. `height` percorre um caminho e custa `O(log n)`. A altura conta níveis e vale zero numa árvore vazia. `splits` é `O(1)` e inclui divisões da raiz desde a criação de cada índice. Uma recarga válida cria novos índices e reinicia a contagem.
 
 ## Planejamento guloso — Opção A
 
@@ -302,7 +306,7 @@ Com orçamento 10 e limite 2, a heurística seleciona A, sobra 4 e o benefício 
 
 ## Testes e validação
 
-A suíte possui 16 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. O teste de menu exercita os quatro modos de pesquisa.
+A suíte possui 21 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. O teste de menu exercita os quatro modos de pesquisa e as métricas por atributo.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

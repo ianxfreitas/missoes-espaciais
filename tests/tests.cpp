@@ -9,6 +9,7 @@
 #include <limits>
 #include <cmath>
 #include "cronicas/TerminalUI.hpp"
+#include <algorithm>
 #include <sstream>
 #include <cstdlib>
 #include <iostream>
@@ -355,6 +356,201 @@ int main() {
                        venus.front() && c.searchNamePrefix("Ve") == venus,
                    "recarga troca os registros e o índice");
          }});
+    tests.push_back({"árvore B inserção e intervalos inclusivos", [] {
+                         auto tree = makeBTreeIndex();
+                         check(tree->height() == 0 && tree->splits() == 0 &&
+                                   tree->range(-2, 2).empty() &&
+                                   !tree->erase(0, "ausente"),
+                               "árvore vazia");
+                         tree->insert(2, "z");
+                         tree->insert(-2, "negative");
+                         tree->insert(0, "zero");
+                         tree->insert(2, "z");
+                         check(tree->height() == 1 && tree->splits() == 0,
+                               "par duplicado não divide a raiz cheia");
+                         tree->insert(2, "a");
+                         tree->insert(2, "c");
+                         check(tree->height() == 2 && tree->splits() == 1,
+                               "divisão da raiz");
+                         check(tree->exact(2) == std::vector<std::string>{"a", "c", "z"},
+                               "valor repetido em mais de um nó");
+                         check(tree->range(-2, 2) == std::vector<std::string>{
+                                                         "negative", "zero", "a", "c", "z"},
+                               "intervalo inclusivo na ordem de valor e ID");
+                         check(tree->exact(-0.0) == std::vector<std::string>{"zero"} &&
+                                   tree->range(-1, -0.5).empty(),
+                               "zero e intervalo sem resultados");
+                         check(tree->erase(2, "c") && !tree->erase(2, "c") &&
+                                   tree->exact(2) == std::vector<std::string>{"a", "z"},
+                               "remoção de um par preserva os demais IDs");
+                     }});
+    tests.push_back({"árvore B redistribuição, fusão e raiz", [] {
+                         struct Scenario {
+                             std::vector<int> order;
+                             int first, second;
+                         };
+                         const std::vector<Scenario> scenarios = {
+                             {{1, 2, 3, 4}, 1, 2},  // Empréstimo da direita.
+                             {{4, 3, 2, 1}, 4, 3},  // Empréstimo da esquerda.
+                             {{1, 2, 3, 4}, 2, 3},  // Sucessor da raiz.
+                             {{4, 3, 2, 1}, 3, 2},  // Predecessor da raiz.
+                         };
+                         for (const auto& scenario : scenarios) {
+                             auto tree = makeBTreeIndex();
+                             for (int n : scenario.order) tree->insert(n, std::to_string(n));
+                             check(tree->height() == 2 && tree->splits() == 1,
+                                   "raiz dividida: um filho com excedente");
+                             check(tree->erase(scenario.first, std::to_string(scenario.first)) &&
+                                       tree->height() == 2 && tree->range(1, 4).size() == 3 &&
+                                       tree->exact(scenario.first).empty(),
+                                   "redistribuição ou substituição preserva a altura");
+                             check(tree->erase(scenario.second, std::to_string(scenario.second)) &&
+                                       tree->height() == 1 && tree->splits() == 1,
+                                   "fusão de filhos mínimos reduz a altura");
+                             std::vector<std::string> remaining;
+                             for (int n : scenario.order) {
+                                 if (n != scenario.first && n != scenario.second)
+                                     remaining.push_back(std::to_string(n));
+                             }
+                             std::sort(remaining.begin(), remaining.end());
+                             check(tree->range(1, 4) == remaining, "pares restantes após fusão");
+                             for (const auto& id : remaining)
+                                 check(tree->erase(std::stoi(id), id), "remove da raiz folha");
+                             check(tree->height() == 0 && tree->splits() == 1 &&
+                                       tree->range(1, 4).empty(),
+                                   "última remoção esvazia a árvore e preserva a contagem");
+                         }
+                     }});
+    tests.push_back({"árvore B multinível comparada com referência", [] {
+                         auto tree = makeBTreeIndex();
+                         std::vector<std::pair<double, std::string>> reference;
+                         const auto expected = [&](double minimum, double maximum) {
+                             std::vector<std::string> ids;
+                             for (const auto& key : reference) {
+                                 if (key.first >= minimum && key.first <= maximum)
+                                     ids.push_back(key.second);
+                             }
+                             return ids;
+                         };
+                         constexpr int count = 128;
+                         for (int i = 0; i < count; ++i) {
+                             const double value = i % 11 - 5;
+                             const auto id = std::to_string(i);
+                             reference.emplace_back(value, id);
+                             tree->insert(value, id);
+                         }
+                         std::sort(reference.begin(), reference.end());
+                         const auto splits = tree->splits();
+                         check(tree->height() > 2 && splits > 1 &&
+                                   tree->range(-5, 5) == expected(-5, 5),
+                               "divisões internas e ordem global das chaves");
+                         for (int i = 0; i < count; ++i) {
+                             const int n = (i * 37) % count;
+                             const auto key = std::make_pair(double(n % 11 - 5), std::to_string(n));
+                             const auto previousHeight = tree->height();
+                             check(tree->erase(key.first, key.second), "remoção multinível");
+                             reference.erase(std::lower_bound(reference.begin(), reference.end(), key));
+                             check(tree->height() <= previousHeight && tree->splits() == splits &&
+                                       tree->range(-5, 5) == expected(-5, 5) &&
+                                       tree->range(-2, 3) == expected(-2, 3) &&
+                                       tree->exact(key.first) == expected(key.first, key.first),
+                                   "métricas e consultas após cada remoção");
+                         }
+                         check(tree->height() == 0, "reduções sucessivas da raiz");
+                         tree->insert(-2, "novo");
+                         check(tree->height() == 1 && tree->exact(-2).size() == 1,
+                               "reutiliza a árvore após esvaziá-la");
+                     }});
+    tests.push_back({"árvore B entradas inválidas", [] {
+                         auto tree = makeBTreeIndex();
+                         const auto rejects = [](auto operation) {
+                             try {
+                                 operation();
+                             } catch (const std::invalid_argument&) {
+                                 return true;
+                             }
+                             return false;
+                         };
+                         const auto infinity = std::numeric_limits<double>::infinity();
+                         tree->insert(0, "zero");
+                         for (double value : {infinity, -infinity,
+                                              std::numeric_limits<double>::quiet_NaN()}) {
+                             check(rejects([&] { tree->insert(value, "a"); }) &&
+                                       rejects([&] { tree->erase(value, "a"); }) &&
+                                       rejects([&] { tree->exact(value); }) &&
+                                       rejects([&] { tree->range(value, 1); }) &&
+                                       rejects([&] { tree->range(0, value); }),
+                                   "valores não finitos rejeitados em todas as operações");
+                         }
+                         check(rejects([&] { tree->range(1, 0); }) &&
+                                   rejects([&] { tree->insert(0, ""); }) &&
+                                   !tree->erase(0, "") &&
+                                   tree->exact(0) == std::vector<std::string>{"zero"},
+                               "intervalo invertido e ID vazio preservam a árvore");
+                     }});
+    tests.push_back(
+        {"catálogo com árvore B e recarga", [] {
+             BodyCatalog c;
+             check(c.numericIndexStatistics()[0].height == 0 &&
+                       c.filterRange("gravity", 0, 0).empty(),
+                   "catálogo antes da primeira carga");
+             auto parsed = parseBodies(R"({"bodies":[
+                 {"id":"z","englishName":"Old","gravity":10,"meanRadius":99},
+                 {"id":"b","gravity":0,"meanRadius":1,"avgTemp":180},
+                 {"id":"a","gravity":2,"meanRadius":3,"avgTemp":180},
+                 {"id":"z","englishName":"Zed","gravity":0,"meanRadius":2,"avgTemp":200},
+                 {"id":"mid","gravity":3},
+                 {"id":"absent"},
+                 {"id":"negative","gravity":-1,"meanRadius":-1,"avgTemp":-1}
+             ]})");
+             auto summary = c.load(parsed, "original");
+             const std::vector<const CelestialBody*> zeros{c.find("b"), c.find("z")};
+             check(summary.updated == 1 && summary.warnings.size() == 3 &&
+                       c.filterRange("gravity", 0, 0) == zeros,
+                   "valores finais, zeros, repetidos e atributos ausentes ou inválidos");
+             check(c.filterRange("gravity", 0, 2) ==
+                       std::vector<const CelestialBody*>{c.find("a"), c.find("b"), c.find("z")} &&
+                       c.filterRange("meanRadius", 1, 2) == zeros &&
+                       c.filterRange("meanRadius", 99, 99).empty() &&
+                       c.filterRange("avgTemp", 180, 180) ==
+                           std::vector<const CelestialBody*>{c.find("a"), c.find("b")},
+                   "três índices independentes e resultados ordenados por ID");
+             const auto stats = c.numericIndexStatistics();
+             check(stats[0].height == 2 && stats[0].splits == 1 &&
+                       stats[1].height == 1 && stats[1].splits == 0 &&
+                       stats[2].height == 1 && stats[2].splits == 0,
+                   "métricas por atributo");
+             for (const auto* field : {"gravity", "avgTemp", "meanRadius", "bad"}) {
+                 bool threw = false;
+                 try {
+                     c.filterRange(field, field == std::string("bad") ? 0 : -1, 2);
+                 } catch (const std::invalid_argument&) {
+                     threw = true;
+                 }
+                 check(threw, "campo desconhecido ou limite físico negativo");
+             }
+             auto replacement = parseBodies(R"({"bodies":[{"id":"venus","meanRadius":2}]})");
+             auto invalid = replacement;
+             invalid.bodies.front().meanRadius = std::numeric_limits<double>::infinity();
+             bool threw = false;
+             try {
+                 c.load(invalid, "falha");
+             } catch (const std::invalid_argument&) {
+                 threw = true;
+             }
+             check(threw && c.source() == "original" && !c.find("venus") &&
+                       c.filterRange("gravity", 0, 0) == zeros &&
+                       c.numericIndexStatistics()[0].splits == 1 &&
+                       c.searchNamePrefix("ze") == std::vector<const CelestialBody*>{c.find("z")},
+                   "falha ao construir índices preserva Hash, Trie, árvores e origem");
+             c.load(replacement, "recarga");
+             check(c.filterRange("gravity", 0, 0).empty() &&
+                       c.filterRange("meanRadius", 2, 2) ==
+                           std::vector<const CelestialBody*>{c.find("venus")} &&
+                       c.numericIndexStatistics()[0].height == 0 &&
+                       c.numericIndexStatistics()[0].splits == 0,
+                   "recarga substitui os índices e reinicia as métricas");
+         }});
     tests.push_back(
         {"guloso e contraexemplo", [] {
              std::vector<MissionCandidate> c = {
@@ -436,6 +632,7 @@ int main() {
              SolarApiClient api(http);
              std::istringstream input(
                  "bad\n2\nmars\n3\n1\nart\n3\n2\ngravity\n1\n4\n"
+                 "3\n2\ngravity\n0\n0\n"
                  "3\n3\neArTh\n3\n4\nMo\n"
                  "4\n5\n1\nMoon\n5\n2\n1\n6\nterre\nmars\n7\n8\n100\n2\n1\n2\n/arquivo/inexistente\n9\n");
              std::ostringstream output;
@@ -455,6 +652,16 @@ int main() {
                    "comparação");
              check(text.find("Colisões de inserção") != std::string::npos,
                    "instrumentação");
+             check(text.find("lune | Moon | Moon\nmars | Mars | Planet\nResultados: 2") !=
+                       std::string::npos &&
+                       text.find("unknown | Synthetic Unknown | Asteroid\nResultados: 1") !=
+                           std::string::npos,
+                   "intervalo e valor exato pelo menu");
+             check(text.find("Árvore B gravity | altura: 2 | divisões: 1\n"
+                             "Árvore B meanRadius | altura: 1 | divisões: 0\n"
+                             "Árvore B avgTemp | altura: 1 | divisões: 0") !=
+                       std::string::npos,
+                   "métricas de cada árvore no menu");
              check(text.find("Benefício total") != std::string::npos,
                    "planejamento");
              check(c.find("mars"), "falha local preserva dados");

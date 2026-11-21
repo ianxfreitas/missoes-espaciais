@@ -1,7 +1,9 @@
 #pragma once
 #include "HashTable.hpp"
 #include "BodyJsonParser.hpp"
+#include "BTreeIndex.hpp"
 #include "TrieIndex.hpp"
+#include <array>
 #include <functional>
 #include <memory>
 namespace cronicas {
@@ -9,9 +11,14 @@ struct LoadSummary {
     size_t received, inserted, updated, rejected;
     std::vector<std::string> warnings;
 };
+struct NumericIndexStatistics {
+    const char* field;
+    size_t height, splits;
+};
 class BodyCatalog {
     HashTable table_;
     std::unique_ptr<TrieIndex> nameIndex_;
+    std::array<std::unique_ptr<BTreeIndex>, 3> numericIndexes_;
     std::string source_ = "nenhuma";
 
    public:
@@ -34,6 +41,7 @@ class BodyCatalog {
                                                   double minimum,
                                                   double maximum) const;
     HashStatistics statistics() const { return table_.statistics(); }
+    std::array<NumericIndexStatistics, 3> numericIndexStatistics() const;
     const std::string& source() const { return source_; }
 
    private:

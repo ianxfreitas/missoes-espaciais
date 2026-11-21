@@ -75,6 +75,9 @@ void TerminalUI::showStats() {
             << "\nColisões de inserção: " << s.collisions
             << "\nFator de carga: " << s.loadFactor
             << "\nRehashings: " << s.rehashes << '\n';
+    for (const auto& index : catalog_.numericIndexStatistics())
+        output_ << "Árvore B " << index.field << " | altura: " << index.height
+                << " | divisões: " << index.splits << '\n';
 }
 void TerminalUI::load() {
     auto mode = integer("Origem: 1 API dinâmica, 2 JSON local explícito: ", 2);
@@ -144,7 +147,7 @@ void TerminalUI::run() {
     while (true) {
         try {
             output_
-                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash\n8 Planejamento guloso\n9 Encerrar\n";
+                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash e da Árvore B\n8 Planejamento guloso\n9 Encerrar\n";
             auto option = integer("Opção: ", 9);
             if (option == 9) {
                 output_ << "Encerrado.\n";

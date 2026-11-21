@@ -6,6 +6,12 @@
 #include <utility>
 namespace cronicas {
 namespace {
+constexpr std::array numericFields{
+    std::pair{"gravity", &CelestialBody::gravity},
+    std::pair{"meanRadius", &CelestialBody::meanRadius},
+    std::pair{"avgTemp", &CelestialBody::avgTemp},
+};
+
 std::string lower(std::string text) {
     for (auto& c : text)
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -27,12 +33,20 @@ LoadSummary BodyCatalog::load(const ParseResult& parsed,
             ++summary.updated;
     }
     auto nameIndex = makeTrieIndex();
-    for (const auto* body : replacement.elements())
+    decltype(numericIndexes_) numericIndexes;
+    for (auto& index : numericIndexes) index = makeBTreeIndex();
+    for (const auto* body : replacement.elements()) {
         nameIndex->insert(lower(displayName(*body)), body->id);
+        for (size_t i = 0; i < numericFields.size(); ++i) {
+            const auto& value = body->*numericFields[i].second;
+            if (value) numericIndexes[i]->insert(*value, body->id);
+        }
+    }
 
     std::string newSource = source;
     table_ = std::move(replacement);
     nameIndex_ = std::move(nameIndex);
+    numericIndexes_ = std::move(numericIndexes);
     source_.swap(newSource);
     return summary;
 }
@@ -90,19 +104,30 @@ std::vector<const CelestialBody*> BodyCatalog::filterRange(
     if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum < 0 ||
         minimum > maximum)
         throw std::invalid_argument("Intervalo inválido");
-    std::optional<double> CelestialBody::* member = nullptr;
-    if (field == "gravity")
-        member = &CelestialBody::gravity;
-    else if (field == "meanRadius")
-        member = &CelestialBody::meanRadius;
-    else if (field == "avgTemp")
-        member = &CelestialBody::avgTemp;
-    else
+
+    const auto attribute = std::find_if(
+        numericFields.begin(), numericFields.end(),
+        [&](const auto& entry) { return field == entry.first; });
+    if (attribute == numericFields.end())
         throw std::invalid_argument(
             "Atributo deve ser gravity, meanRadius ou avgTemp");
-    return select([&](const auto& b) {
-        const auto& value = b.*member;
-        return value && *value >= minimum && *value <= maximum;
-    });
+
+    const auto& index = numericIndexes_[attribute - numericFields.begin()];
+    if (!index) return {};
+    auto ids = minimum == maximum ? index->exact(minimum)
+                                  : index->range(minimum, maximum);
+    std::sort(ids.begin(), ids.end());
+    return resolveIds(ids);
+}
+std::array<NumericIndexStatistics, 3> BodyCatalog::numericIndexStatistics() const {
+    std::array<NumericIndexStatistics, 3> statistics{};
+    for (size_t i = 0; i < statistics.size(); ++i) {
+        statistics[i].field = numericFields[i].first;
+        if (const auto& index = numericIndexes_[i]) {
+            statistics[i].height = index->height();
+            statistics[i].splits = index->splits();
+        }
+    }
+    return statistics;
 }
 }  // namespace cronicas
