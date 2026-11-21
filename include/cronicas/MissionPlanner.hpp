@@ -23,4 +23,7 @@ CandidateSet estimateCandidates(
     const std::vector<const CelestialBody*>& bodies);
 MissionPlan planMissions(std::vector<MissionCandidate> candidates,
                          double budget, size_t limit);
+// Otimiza a seleção 0/1 em centésimos, com custos para cima e orçamento para baixo.
+MissionPlan optimizeMissions(std::vector<MissionCandidate> candidates,
+                             double budget, size_t limit);
 }  // namespace cronicas

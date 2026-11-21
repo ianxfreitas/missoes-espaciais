@@ -16,7 +16,7 @@ class TerminalUI {
     void showStats();
     void load();
     void compare();
-    void plan();
+    void plan(bool dynamic);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,

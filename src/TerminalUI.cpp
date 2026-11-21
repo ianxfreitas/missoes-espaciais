@@ -121,34 +121,51 @@ void TerminalUI::compare() {
     difference("raio (km)", a->meanRadius, b->meanRadius);
     difference("temperatura (K)", a->avgTemp, b->avgTemp);
 }
-void TerminalUI::plan() {
+void TerminalUI::plan(bool dynamic) {
     double budget = number("Orçamento em unidades didáticas: ");
     size_t limit = integer("Limite de missões: ", 1000000);
     auto estimates = estimateCandidates(catalog_.list());
-    output_
-        << "Modelo acadêmico: custos e benefícios fictícios; prioridade benefício/custo.\nElegíveis: "
-        << estimates.candidates.size()
-        << " | Excluídos: " << estimates.excluded.size() << '\n';
+    output_ << (dynamic ? "Modelo acadêmico: programação dinâmica em centésimos. "
+                          "Custos arredondados para cima, orçamento para baixo.\n"
+                        : "Modelo acadêmico: custos e benefícios fictícios; "
+                          "prioridade benefício/custo.\n")
+            << "Elegíveis: " << estimates.candidates.size()
+            << " | Excluídos: " << estimates.excluded.size() << '\n';
     for (const auto& e : estimates.excluded)
         output_ << "Excluído " << e.id << ": " << e.reason << '\n';
-    auto p = planMissions(estimates.candidates, budget, limit);
-    for (const auto& c : p.selected)
-        output_ << c.id << " | " << c.name << " | benefício " << c.benefit
-                << " | custo " << c.cost << " | razão " << c.benefit / c.cost
+
+    const auto showPlan = [this](const MissionPlan& plan, bool showRatio) {
+        for (const auto& candidate : plan.selected) {
+            output_ << candidate.id << " | " << candidate.name << " | benefício "
+                    << candidate.benefit << " | custo " << candidate.cost;
+            if (showRatio) output_ << " | razão " << candidate.benefit / candidate.cost;
+            output_ << '\n';
+        }
+        output_ << "Benefício total: " << plan.totalBenefit
+                << "\nCusto total: " << plan.totalCost << " / " << plan.budget
+                << "\nOrçamento restante: " << plan.budget - plan.totalCost
+                << "\nMissões: " << plan.selected.size() << " / " << plan.missionLimit
                 << '\n';
-    output_ << "Benefício total: " << p.totalBenefit
-            << "\nCusto total: " << p.totalCost << " / " << budget
-            << "\nOrçamento restante: " << budget - p.totalCost
-            << "\nMissões: " << p.selected.size() << " / " << limit
-            << "\nA heurística não garante o ótimo global.\n";
+    };
+
+    if (dynamic) {
+        const auto optimized = optimizeMissions(estimates.candidates, budget, limit);
+        output_ << "\nProgramação dinâmica — melhor plano no modelo discretizado\n";
+        if (optimized.selected.empty())
+            output_ << "Nenhuma missão selecionada neste cenário.\n";
+        showPlan(optimized, false);
+        output_ << "\nGuloso no mesmo cenário — custos originais\n";
+    }
+    showPlan(planMissions(estimates.candidates, budget, limit), true);
+    output_ << "A heurística não garante o ótimo global.\n";
 }
 void TerminalUI::run() {
     output_ << std::setprecision(8) << "Crônicas do Espaço — Parte 1\n";
     while (true) {
         try {
             output_
-                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash e da Árvore B\n8 Planejamento guloso\n9 Encerrar\n";
-            auto option = integer("Opção: ", 9);
+                << "\n1 Carregar dados\n2 Consultar ID\n3 Pesquisar nome ou atributo\n4 Listar corpos\n5 Filtrar tipo ou planeta\n6 Comparar dois corpos\n7 Estatísticas da Hash e da Árvore B\n8 Planejamento guloso\n9 Encerrar\n10 Planejamento por programação dinâmica\n";
+            auto option = integer("Opção: ", 10);
             if (option == 9) {
                 output_ << "Encerrado.\n";
                 return;
@@ -213,10 +230,13 @@ void TerminalUI::run() {
                     showStats();
                     break;
                 case 8:
-                    plan();
+                    plan(false);
+                    break;
+                case 10:
+                    plan(true);
                     break;
                 default:
-                    output_ << "Escolha entre 1 e 9.\n";
+                    output_ << "Escolha entre 1 e 10.\n";
             }
         } catch (const EndInput&) {
             output_ << "\nEntrada encerrada.\n";

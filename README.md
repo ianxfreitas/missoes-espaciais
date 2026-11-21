@@ -9,7 +9,7 @@ Projeto de Algoritmos e Estruturas de Dados II da Universidade Federal de Pelota
 
 ## Escopo e fonte principal
 
-O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 já incorpora a Trie para busca por nome e a Árvore B para buscas por atributos físicos. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
+O enunciado está em [docs/enunciado.pdf](docs/enunciado.pdf). A Parte 1 implementou a Hash e a seleção gulosa de Planejamento e Triagem de Missões (opção A). A Parte 2 incorpora a Trie para busca por nome, a Árvore B para buscas por atributos físicos e a otimização de recursos por programação dinâmica. O README constitui o relatório técnico consolidado, incluindo análise amortizada.
 
 ## Ferramentas e instalação no Fedora
 
@@ -134,7 +134,7 @@ Massa é mantida em notação científica, sem expandir potências desnecessaria
 | `BodyCatalog` | Carga transacional, pesquisas e filtros |
 | `TrieIndex` | Interface e implementação da Trie para nomes |
 | `BTreeIndex` | Interface e implementação da Árvore B para atributos físicos |
-| `MissionPlanner` | Estimativas físicas e seleção gulosa |
+| `MissionPlanner` | Estimativas físicas, seleção gulosa e otimização por programação dinâmica |
 | `TerminalUI`, `main.cpp` | Menu, leitura e apresentação |
 | `tests/tests.cpp` | Suíte sem dependência de rede |
 | `tests/fixtures/bodies.json` | Entrada local de teste |
@@ -227,8 +227,9 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 5. Filtrar: tipo ou condição de planeta.
 6. Comparar: consultar dois IDs na Hash, mostrar características e diferenças físicas conhecidas.
 7. Estatísticas. Exibe fonte, elementos, capacidade, colisões, fator de carga e expansões da Hash e a altura e as divisões da Árvore B de cada atributo.
-8. Planejar: orçamento e limite de missões, candidatos excluídos, destinos e totais.
+8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
+10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -302,11 +303,28 @@ A escolha de maior retorno por unidade de custo pode ocupar recursos necessário
 | B | 5 | 9 | 1,8 |
 | C | 5 | 9 | 1,8 |
 
-Com orçamento 10 e limite 2, a heurística seleciona A, sobra 4 e o benefício é 12. Selecionar B+C custa 10 e beneficia 18. O teste automatizado verifica ambas as contas. Os candidatos são sintéticos, usados para testar o algoritmo de seleção independentemente das fórmulas físicas.
+Com orçamento 10 e limite 2, a heurística seleciona A, sobra 4 e o benefício é 12. A programação dinâmica seleciona B+C, gasta 10 e obtém benefício 18. Com orçamento 16 e limite 3, ambas selecionam os três destinos e obtêm benefício 30. Os candidatos são sintéticos, usados para testar a seleção independentemente das fórmulas físicas.
+
+## Otimização de recursos por programação dinâmica
+
+`optimizeMissions` usa os mesmos candidatos, custos e benefícios produzidos por `estimateCandidates`. Na mochila 0/1, cada destino tem uma variável binária `x_i`, um benefício `v_i` e um custo inteiro `w_i`. O orçamento convertido é `B` e o limite de missões é `K`.
+
+```text
+maximizar Σ v_i x_i
+sujeito a Σ w_i x_i ≤ B, Σ x_i ≤ K, x_i ∈ {0, 1}
+```
+
+O custo `w_i` é o custo estimado em centésimos, arredondado para cima. O orçamento `B` é o orçamento em centésimos, arredondado para baixo. Valores exatamente em uma fronteira de centésimo são reconhecidos mesmo com o erro de representação de `double`. Essa conversão mantém o plano dentro do orçamento. O ótimo vale para o modelo discretizado. Por exemplo, duas missões de custo original `1.001` exigem `2.02` no modelo e podem ficar de fora com um orçamento de `2.019`. A comparação no menu usa os custos originais para o guloso e exibe os custos estimados, o benefício e o saldo de cada plano.
+
+O estado `D_i(k,b)` guarda o maior benefício com os primeiros `i` destinos, exatamente `k` missões e custo de até `b` centésimos. A transição compara deixar o destino de fora (`D_(i-1)(k,b)`) com incluí-lo (`D_(i-1)(k-1,b-w_i) + v_i`), se houver orçamento e vagas. A linha de nenhuma missão começa em zero e os estados inviáveis começam em menos infinito. Percorrer a quantidade de missões em ordem decrescente preserva os estados necessários do conjunto anterior, evitando usar o mesmo destino duas vezes.
+
+O maior benefício entre as quantidades de `0` a `K` determina o plano. Os empates favorecem menos missões e depois o menor custo discretizado. Com benefício, quantidade e custo iguais, a atualização mantém a solução anterior ao processar os IDs em ordem crescente. Um registro por candidato e estado permite recuperar os destinos em ordem inversa. Quando nenhuma seleção satisfaz os limites, o plano vazio usa zero recursos.
+
+Para `n` candidatos considerados, orçamento efetivo `B` em centésimos e limite efetivo `K`, a programação dinâmica consome tempo `O(n K B)`. Os benefícios ocupam `O(K B)` e as decisões de reconstrução ocupam `O(n K B)` bytes. A validação e a ordenação por ID dos candidatos de entrada acrescentam `O(N log N)` para `N` candidatos. Antes das alocações, o algoritmo reduz a capacidade à soma dos custos relevantes, reduz `K` ao número de escolhas possíveis e verifica o limite de 64 MiB para as duas tabelas. Cenários que excedem o limite geram um erro e podem ser avaliados com orçamento ou limite de missões menor.
 
 ## Testes e validação
 
-A suíte possui 21 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. O teste de menu exercita os quatro modos de pesquisa e as métricas por atributo.
+A suíte possui 26 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

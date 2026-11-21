@@ -598,6 +598,213 @@ int main() {
              }
              check(threw, "duplicado");
          }});
+    tests.push_back(
+        {"programação dinâmica e comparação com guloso", [] {
+             const std::vector<MissionCandidate> candidates = {
+                 {"c", "C", 9, 5}, {"a", "A", 12, 6}, {"b", "B", 9, 5}};
+             const auto greedy = planMissions(candidates, 10, 2);
+             const auto optimal = optimizeMissions(candidates, 10, 2);
+             check(greedy.totalBenefit == 12 && optimal.totalBenefit == 18 &&
+                       optimal.totalCost == 10 && optimal.selected.size() == 2 &&
+                       optimal.selected[0].id == "b" && optimal.selected[1].id == "c",
+                   "PD supera o guloso com o mesmo orçamento e limite");
+             const auto all = optimizeMissions(candidates, 16, 3);
+             const auto greedyAll = planMissions(candidates, 16, 3);
+             check(all.selected.size() == 3 && all.totalBenefit == 30 &&
+                       all.totalBenefit == greedyAll.totalBenefit &&
+                       all.totalCost == greedyAll.totalCost,
+                   "ambos selecionam as três missões quando cabem");
+             const auto one = optimizeMissions(candidates, 10, 1);
+             check(one.selected.size() == 1 && one.selected.front().id == "a",
+                   "limite impede seleção de duas missões");
+             const auto tied = optimizeMissions(candidates, 100, 2);
+             check(tied.selected.size() == 2 && tied.selected[0].id == "a" &&
+                       tied.selected[1].id == "b",
+                   "custos e benefícios repetidos com desempate determinístico");
+             check(optimizeMissions({{"a", "", 8, 2}, {"b", "", 4, 1},
+                                     {"c", "", 4, 1}}, 2, 2).selected.size() == 1,
+                   "mesmo benefício favorece menos missões");
+             const auto cheapest = optimizeMissions(
+                 {{"a", "", 5, 3}, {"b", "", 5, 2}}, 10, 1);
+             check(cheapest.selected.size() == 1 && cheapest.selected.front().id == "b",
+                   "mesmo benefício e quantidade favorecem custo discretizado menor");
+         }});
+    tests.push_back(
+        {"programação dinâmica com custos decimais e plano vazio", [] {
+             const auto decimals = optimizeMissions(
+                 {{"a", "", 3, 0.10}, {"b", "", 4, 0.20}}, 0.30, 2);
+             check(decimals.totalCost == 0.30 && decimals.totalBenefit == 7 &&
+                       decimals.selected.size() == 2,
+                   "centésimos exatos cabem no limite decimal");
+             const std::vector<MissionCandidate> boundary = {{"a", "", 1, 0.29}};
+             check(optimizeMissions(boundary, 0.29, 1).selected.size() == 1 &&
+                       optimizeMissions(boundary, std::nextafter(0.29, 0.0), 1)
+                           .selected.empty(),
+                   "orçamento exatamente na fronteira ou logo abaixo dela");
+             const auto justAbove = std::nextafter(0.29, 1.0);
+             check(optimizeMissions({{"a", "", 1, justAbove}}, 0.299, 1)
+                       .selected.empty(),
+                   "custo acima da fronteira arredonda para cima");
+             const std::vector<MissionCandidate> fractional = {
+                 {"a", "", 4, 1.001}, {"b", "", 4, 1.001}};
+             const auto rounded = optimizeMissions(fractional, 2.019, 2);
+             check(rounded.selected.size() == 1 && rounded.totalCost == 1.001 &&
+                       planMissions(fractional, 2.019, 2).selected.size() == 2,
+                   "arredondamento conservador pode excluir combinação do guloso");
+             const std::vector<MissionCandidate> noBenefit = {{"z", "", 0, 1}};
+             const std::vector<MissionCandidate> subcent = {{"a", "", 1, 0.001}};
+             check(optimizeMissions(fractional, 2.02, 2).selected.size() == 2 &&
+                       optimizeMissions(fractional, 1.00, 2).selected.empty() &&
+                       optimizeMissions(fractional, 10, 0).selected.empty() &&
+                       optimizeMissions({}, 10, 3).selected.empty() &&
+                       optimizeMissions(noBenefit, 10, 3).selected.empty(),
+                   "fronteira, orçamento insuficiente, limite zero e benefício zero");
+             check(optimizeMissions(fractional, 0, 2).selected.empty() &&
+                       optimizeMissions(subcent, 0.009, 1).selected.empty(),
+                   "orçamento abaixo de um centésimo");
+             const auto tinyCost = std::numeric_limits<double>::min();
+             const auto tiny = optimizeMissions({{"a", "", 5, tinyCost}}, 0.01, 1);
+             check(tiny.totalBenefit == 5 && tiny.totalCost == tinyCost,
+                   "PD aceita custo minúsculo sem calcular razão benefício/custo");
+         }});
+    tests.push_back(
+        {"programação dinâmica comparada com enumeração exaustiva", [] {
+             for (size_t n = 0; n <= 10; ++n) {
+                 std::vector<MissionCandidate> candidates;
+                 std::vector<size_t> costs;
+                 for (size_t i = 0; i < n; ++i) {
+                     const size_t units = (7 * i + n) % 11 + 1;
+                     const double cost = (10 * units - (i % 3 == 0 ? 4 : 0)) / 1000.0;
+                     costs.push_back(units);
+                     candidates.push_back({std::string(1, static_cast<char>('a' + i)),
+                                           "", static_cast<double>((i + n) * 3 % 7), cost});
+                 }
+                 for (size_t budget : {0, 1, 5, 9, 16, 25, 40}) {
+                     for (size_t limit : {0, 1, 3, 10}) {
+                         double bestBenefit = 0;
+                         size_t bestCount = 0, bestCost = 0;
+                         for (size_t mask = 0; mask < (size_t{1} << n); ++mask) {
+                             size_t count = 0, cost = 0;
+                             double benefit = 0;
+                             for (size_t i = 0; i < n; ++i) {
+                                 if (!(mask & (size_t{1} << i))) continue;
+                                 ++count;
+                                 cost += costs[i];
+                                 benefit += candidates[i].benefit;
+                             }
+                             if (count > limit || cost > budget) continue;
+                             if (benefit > bestBenefit ||
+                                 (benefit == bestBenefit &&
+                                  std::make_pair(count, cost) < std::make_pair(bestCount, bestCost))) {
+                                 bestBenefit = benefit;
+                                 bestCount = count;
+                                 bestCost = cost;
+                             }
+                         }
+
+                         const auto available = (10 * budget + 7) / 1000.0;
+                         const auto plan = optimizeMissions(candidates, available, limit);
+                         check(plan.totalBenefit == bestBenefit &&
+                                   plan.selected.size() == bestCount && plan.totalCost <= available,
+                               "ótimo e viabilidade coincidem com enumeração");
+                         size_t mask = 0, usedCost = 0;
+                         double benefit = 0, cost = 0;
+                         for (const auto& candidate : plan.selected) {
+                             const auto i = static_cast<size_t>(candidate.id.front() - 'a');
+                             check(i < n && !(mask & (size_t{1} << i)),
+                                   "reconstrução seleciona cada candidato no máximo uma vez");
+                             mask |= size_t{1} << i;
+                             usedCost += costs[i];
+                             benefit += candidate.benefit;
+                             cost += candidate.cost;
+                         }
+                         check(usedCost == bestCost && benefit == bestBenefit &&
+                                   std::abs(cost - plan.totalCost) < 1e-12,
+                               "itens reconstruídos produzem os totais e desempates esperados");
+                     }
+                 }
+             }
+         }});
+    tests.push_back(
+        {"programação dinâmica validação e limite de memória", [] {
+             const MissionCandidate valid{"a", "", 1, 1};
+             const auto invalid = [](auto operation) {
+                 try {
+                     operation();
+                 } catch (const std::invalid_argument&) {
+                     return true;
+                 }
+                 return false;
+             };
+             const auto infinity = std::numeric_limits<double>::infinity();
+             for (const auto budget : {-1.0, infinity,
+                                       std::numeric_limits<double>::quiet_NaN()})
+                 check(invalid([&] { optimizeMissions({valid}, budget, 1); }),
+                       "orçamento inválido");
+             check(invalid([&] { optimizeMissions({valid, valid}, 1, 2); }) &&
+                       invalid([] { optimizeMissions({{"", "", 1, 1}}, 1, 1); }) &&
+                       invalid([] { optimizeMissions({{"a", "", 1, 0}}, 1, 1); }) &&
+                       invalid([] { optimizeMissions({{"a", "", -1, 1}}, 1, 1); }),
+                   "candidatos inválidos e IDs duplicados");
+
+             const auto max = std::numeric_limits<double>::max();
+             const auto available = optimizeMissions({valid}, max,
+                                                       std::numeric_limits<size_t>::max());
+             check(available.totalBenefit == 1 && available.totalCost == 1,
+                   "dimensões efetivas limitadas pelos candidatos e custos");
+             check(optimizeMissions({{"a", "", 1, max}}, 10, 1).selected.empty(),
+                   "custo fora do orçamento é descartado antes da conversão");
+             std::vector<MissionCandidate> many;
+             for (size_t i = 0; i < 200; ++i)
+                 many.push_back({std::to_string(i), "", 1, 5});
+             for (const auto& candidates :
+                  {std::vector<MissionCandidate>{{"a", "", 1, max}},
+                   std::vector<MissionCandidate>{{"a", "", 1, 50000}}, many}) {
+                 bool rejected = false;
+                 try {
+                     optimizeMissions(candidates, max, 50);
+                 } catch (const std::length_error&) {
+                     rejected = true;
+                 }
+                 check(rejected, "limites do custo, da tabela ou da reconstrução");
+             }
+             bool overflow = false;
+             try {
+                 optimizeMissions({{"a", "", max, 1}, {"b", "", max, 1}}, 2, 2);
+             } catch (const std::overflow_error&) {
+                 overflow = true;
+             }
+             check(overflow, "benefício acumulado fora da faixa numérica");
+         }});
+    tests.push_back(
+        {"menu programação dinâmica e comparação", [] {
+             BodyCatalog catalog;
+             catalog.load(parseBodies(R"({"bodies":[
+                 {"id":"a","englishName":"A","bodyType":"Dwarf Planet","meanRadius":100,"gravity":19.6133},
+                 {"id":"b","englishName":"B","bodyType":"Moon","meanRadius":100,"gravity":4.903325},
+                 {"id":"c","englishName":"C","bodyType":"Moon","meanRadius":100,"gravity":4.903325}
+             ]})"), "teste");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             std::istringstream input("10\n25.02\n2\n10\n1\n2\n10\n-1\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto comparison = text.find("Guloso no mesmo cenário");
+             check(comparison != std::string::npos &&
+                       text.find("b | B | benefício") < comparison &&
+                       text.find("c | C | benefício") < comparison &&
+                       text.find("Missões: 2 / 2") < comparison &&
+                       text.find("a | A | benefício", comparison) != std::string::npos,
+                   "mesmos candidatos e cenário exibem planos diferentes");
+             check(text.find("Benefício total: 15.20412") != std::string::npos &&
+                       text.find("Benefício total: 10.60206") != std::string::npos &&
+                       text.find("Orçamento restante:") != std::string::npos &&
+                       text.find("Nenhuma missão selecionada") != std::string::npos &&
+                       text.find("Erro: Digite um número finito não negativo") != std::string::npos &&
+                       text.find("Encerrado.") != std::string::npos,
+                   "totais, cenário sem seleção e recuperação após orçamento inválido");
+         }});
     tests.push_back({"estimativas físicas", [] {
                          CelestialBody b;
                          b.id = "mars";
