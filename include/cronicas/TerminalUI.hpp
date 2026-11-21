@@ -23,6 +23,7 @@ class TerminalUI {
     void networkMenu();
     void showNetwork(const MissionNetwork& network);
     void planRoute(const MissionNetwork& network);
+    void showActivityOrder(const MissionNetwork& network);
 
    public:
     TerminalUI(BodyCatalog& catalog, const SolarApiClient& api,

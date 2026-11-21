@@ -232,7 +232,7 @@ Atualizações de duplicatas não acionam expansão. A tabela não contrai e nã
 8. Planejamento guloso. Solicita orçamento e limite de missões e apresenta candidatos excluídos, destinos e totais.
 9. Encerrar.
 10. Planejamento por programação dinâmica. Solicita o mesmo orçamento e limite e mostra os planos dos dois algoritmos.
-11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede e `3` para planejar um deslocamento por ID de origem e destino.
+11. Rede espacial. Use `1` para carregar um cenário JSON, `2` para visualizar a rede, `3` para planejar um deslocamento por ID de origem e destino e `4` para ordenar as atividades.
 
 A comparação ajuda a interpretar possíveis destinos e exercita efetivamente a Hash. A pesquisa usa normalização de maiúsculas ASCII, adequada aos nomes ingleses; não implementa normalização Unicode. Intervalos incluem seus limites e ignoram atributos ausentes. O valor false de isPlanet não é confundido com campo ausente. IDs são sensíveis a maiúsculas. Números decimais usam ponto. Entradas inválidas geram mensagem e retornam ao menu; fim de entrada encerra inclusive durante um submenu.
 
@@ -356,9 +356,17 @@ Depois de carregar o cenário de exemplo, `11 → 2` mostra o arco direto `terre
 
 Com `V` vértices e `R` rotas, a construção do índice de adjacência custa `O(V + R)`. Como cada melhora pode inserir uma nova entrada na fila, o tempo total é `O(V + R log(R + 1))` e o espaço auxiliar é `O(V + R)`. No cenário, existe no máximo uma rota por par ordenado de vértices, então o tempo também pode ser expresso como `O(V + R log(V + 1))`.
 
+### Organização de atividades com Kahn
+
+`orderActivities` usa as atividades e dependências do cenário. Para cada dependência `before -> after`, o algoritmo conta um pré-requisito pendente de `after` e registra que ela depende de `before`. A fila começa com todas as atividades que têm contagem zero. A cada atividade processada, o algoritmo reduz a contagem de suas dependentes e coloca na fila as que chegam a zero. Atividades isoladas entram na fila inicial, e ordens diferentes podem satisfazer as mesmas dependências.
+
+Se a fila se esgotar antes de processar todas as atividades, existe um ciclo de dependências e nenhuma ordem completa é possível. Uma autodependência também bloqueia a ordem. Um cenário sem atividades tem uma ordem válida vazia e recebe uma mensagem própria no menu. Com `A` atividades e `D` dependências, a ordenação tem tempo e espaço auxiliar `O(A + D)`.
+
+Depois de carregar o cenário de exemplo, use `11 → 4`. O menu mostra ID, nome e corpo celeste de cada atividade na sequência `prepare → relay → survey`.
+
 ## Testes e validação
 
-A suíte possui 34 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu.
+A suíte possui 37 grupos internos. Os testes da Parte 1 cobrem modelo, JSON, HTTP simulado, Hash, catálogo, guloso e menu. Os testes da Trie cobrem inserção, remoção e poda, consultas, nomes repetidos, entradas vazias, nós visitados e reconstrução do índice em recargas. Os testes da Árvore B cobrem chaves compostas, intervalos, métricas, entradas inválidas, redistribuição, fusão, redução da raiz e consistência das consultas após remoções multinível. Os testes de programação dinâmica incluem 308 cenários comparados com enumeração exaustiva, planos vazios, casos de empate ou vantagem sobre o guloso, fronteiras decimais, limite de memória e comparação dos planos pelo menu. Os testes da rede cobrem o cenário de exemplo, tipos de aresta, IDs e valores inválidos, duplicatas, redes desconexas e o fluxo de carregar e visualizar pelo menu. Os testes de Dijkstra verificam caminhos diretos, alternativas mais baratas, custos zero, ciclos, empates, destinos inalcançáveis e o fluxo do submenu. Os testes de Kahn conferem que cada atividade aparece uma vez e após todos os seus pré-requisitos. Também cobrem atividades isoladas, cenário vazio, ciclos, autodependências e o novo modo do menu.
 
 Testes de rede são separados da suíte determinística: com token configurado, abra `./build/missoes`, escolha 1 e depois 1. A disponibilidade externa não deve tornar o CTest instável. Confira a origem API dinâmica e as métricas após a carga.
 

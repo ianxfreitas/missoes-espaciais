@@ -149,6 +149,34 @@ std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
     return plan;
 }
 
+std::optional<std::vector<std::size_t>> orderActivities(const MissionNetwork& network) {
+    const auto count = network.activities.size();
+    std::vector<std::size_t> pendingPrerequisites(count, 0);
+    std::vector<std::vector<std::size_t>> dependents(count);
+    for (const auto& dependency : network.dependencies) {
+        if (dependency.before >= count || dependency.after >= count)
+            throw std::invalid_argument("Dependência com atividade fora do cenário");
+        dependents[dependency.before].push_back(dependency.after);
+        ++pendingPrerequisites[dependency.after];
+    }
+
+    std::vector<std::size_t> order;
+    order.reserve(count);
+    for (std::size_t activity = 0; activity < count; ++activity) {
+        if (pendingPrerequisites[activity] == 0) order.push_back(activity);
+    }
+
+    // A ordem funciona também como fila FIFO de atividades prontas.
+    for (std::size_t next = 0; next < order.size(); ++next) {
+        for (auto dependent : dependents[order[next]]) {
+            if (--pendingPrerequisites[dependent] == 0) order.push_back(dependent);
+        }
+    }
+
+    if (order.size() != count) return std::nullopt;
+    return order;
+}
+
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog) {
     json root;

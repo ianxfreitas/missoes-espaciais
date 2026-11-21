@@ -167,7 +167,9 @@ void TerminalUI::plan(bool dynamic) {
 }
 void TerminalUI::networkMenu() {
     const auto mode = integer(
-        "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento: ", 3);
+        "Rede espacial: 1 carregar cenário, 2 visualizar, 3 planejar deslocamento, "
+        "4 ordenar atividades: ",
+        4);
     if (mode == 0) throw std::invalid_argument("Opção de rede inválida");
     if (mode == 1) {
         const auto path = read("Caminho do cenário JSON: ");
@@ -177,8 +179,10 @@ void TerminalUI::networkMenu() {
         output_ << "Nenhum cenário de rede carregado.\n";
     } else if (mode == 2) {
         showNetwork(*network_);
-    } else {
+    } else if (mode == 3) {
         planRoute(*network_);
+    } else {
+        showActivityOrder(*network_);
     }
 }
 void TerminalUI::planRoute(const MissionNetwork& network) {
@@ -197,6 +201,27 @@ void TerminalUI::planRoute(const MissionNetwork& network) {
         output_ << plan->path[i];
     }
     output_ << "\nCusto total: " << plan->totalCost << '\n';
+}
+void TerminalUI::showActivityOrder(const MissionNetwork& network) {
+    const auto order = orderActivities(network);
+    if (!order) {
+        output_ << "Ciclo de dependências: não existe uma ordem válida de execução.\n";
+        return;
+    }
+    if (order->empty()) {
+        output_ << "O cenário não contém atividades.\n";
+        return;
+    }
+
+    output_ << "Ordem de execução das atividades\n";
+    for (std::size_t i = 0; i < order->size(); ++i) {
+        const auto& activity = network.activities[(*order)[i]];
+        const auto& bodyId = network.vertices[activity.body];
+        output_ << "  " << i + 1 << ". " << activity.id << " | " << activity.name
+                << " @ " << bodyId;
+        if (const auto* body = catalog_.find(bodyId)) output_ << " | " << displayName(*body);
+        output_ << '\n';
+    }
 }
 void TerminalUI::showNetwork(const MissionNetwork& network) {
     const auto vertexId = [&](size_t position) -> const std::string& {

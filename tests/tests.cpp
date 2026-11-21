@@ -1208,6 +1208,84 @@ int main() {
                        text.find("Encerrado.") != std::string::npos,
                    "percurso trivial e retorno ao menu após ID inválido");
          }});
+    tests.push_back(
+        {"Kahn validade da ordem e atividades isoladas", [] {
+             const auto checkOrder = [](const MissionNetwork& network) {
+                 const auto order = orderActivities(network);
+                 const auto count = network.activities.size();
+                 check(order && order->size() == count, "ordem inclui todas as atividades");
+                 std::vector<std::size_t> position(count, count);
+                 for (std::size_t i = 0; i < count; ++i) {
+                     const auto activity = (*order)[i];
+                     check(activity < count && position[activity] == count,
+                           "cada atividade aparece exatamente uma vez");
+                     position[activity] = i;
+                 }
+                 for (const auto& dependency : network.dependencies)
+                     check(position[dependency.before] < position[dependency.after],
+                           "pré-requisito aparece antes da atividade dependente");
+             };
+
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             auto network = readMissionNetwork(NETWORK_SCENARIO_PATH, catalog);
+             checkOrder(network);  // Sequência prepare -> relay -> survey.
+
+             network.activities.push_back({"calibrate", "Calibrar instrumentos", 2});
+             network.activities.push_back({"photo", "Fotografar a Lua", 1});
+             // A atividade 1 espera por 2 e 3. A 4 está isolada e a 0 vem após a 1.
+             network.dependencies = {{2, 1}, {3, 1}, {1, 0}};
+             checkOrder(network);
+             std::reverse(network.dependencies.begin(), network.dependencies.end());
+             checkOrder(network);
+             network.dependencies.clear();
+             checkOrder(network);
+             network.activities.clear();
+             checkOrder(network);
+         }});
+    tests.push_back(
+        {"Kahn ciclos, autodependência e entrada inválida", [] {
+             MissionNetwork network;
+             network.vertices = {"terre"};
+             network.activities = {{"a", "A", 0}, {"b", "B", 0},
+                                   {"c", "C", 0}, {"isolated", "Isolada", 0}};
+             network.dependencies = {{0, 1}, {1, 0}, {1, 2}};
+             check(!orderActivities(network),
+                   "ciclo bloqueia a ordem completa mesmo com uma atividade disponível");
+             network.dependencies = {{2, 2}};
+             check(!orderActivities(network), "autodependência é um ciclo");
+             network.dependencies = {{0, 4}};
+             bool rejected = false;
+             try {
+                 orderActivities(network);
+             } catch (const std::invalid_argument&) {
+                 rejected = true;
+             }
+             check(rejected, "referência inválida em rede montada em memória");
+         }});
+    tests.push_back(
+        {"menu ordenação de atividades e regressão de Dijkstra", [] {
+             BodyCatalog catalog;
+             catalog.load(readLocalJson(FIXTURE_PATH), "fixture");
+             CurlHttpClient http;
+             SolarApiClient api(http);
+             const std::string scenario = NETWORK_SCENARIO_PATH;
+             std::istringstream input("11\n4\n11\n1\n" + scenario +
+                                      "\n11\n4\n11\n3\nterre\nmars\n9\n");
+             std::ostringstream output;
+             TerminalUI(catalog, api, input, output).run();
+             const auto text = output.str();
+             const auto order = text.find("Ordem de execução das atividades\n");
+             check(text.find("Nenhum cenário de rede carregado.") < order &&
+                       text.find("1. prepare | Preparar a missão @ terre | Earth\n"
+                                 "  2. relay | Instalar o retransmissor @ lune | Moon\n"
+                                 "  3. survey | Iniciar o levantamento @ mars | Mars", order) !=
+                           std::string::npos,
+                   "menu exibe IDs, nomes e locais após carregar o cenário");
+             check(text.find("Percurso: terre -> lune -> mars\nCusto total: 6", order) !=
+                       std::string::npos && text.find("Encerrado.") != std::string::npos,
+                   "Dijkstra continua disponível no mesmo submenu");
+         }});
     int failures = 0;
     for (const auto& t : tests) {
         try {

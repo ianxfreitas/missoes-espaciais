@@ -53,6 +53,10 @@ std::optional<TravelPlan> shortestTravelPath(const MissionNetwork& network,
                                              const std::string& origin,
                                              const std::string& destination);
 
+// Retorna índices em activities. Um ciclo produz nullopt.
+// Um cenário sem atividades produz uma ordem vazia.
+std::optional<std::vector<std::size_t>> orderActivities(const MissionNetwork& network);
+
 MissionNetwork parseMissionNetwork(const std::string& text,
                                    const BodyCatalog& catalog);
 MissionNetwork readMissionNetwork(const std::string& path,
